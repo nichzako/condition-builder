@@ -12,8 +12,8 @@
 | 1 | Data Layer | ✅ Done |
 | 2 | tRPC Routers | ✅ Done |
 | 3 | Frontend Foundation | ✅ Done |
-| 4 | Field Panel + Auto-save | ⏳ ถัดไป |
-| 5 | Drag & Drop Foundation | — |
+| 4 | Field Panel + Auto-save | ✅ Done |
+| 5 | Drag & Drop Foundation | ⏳ ถัดไป |
 | 6 | Condition Panel | — |
 | 7 | Result / Formula Panel | — |
 | 8 | Formula Engine + RUN | — |
