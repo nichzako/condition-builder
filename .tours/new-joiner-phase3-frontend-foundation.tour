@@ -1,0 +1,83 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Phase 3 — Frontend Foundation (New Joiner)",
+  "description": "ทัวร์นี้อธิบายว่า Phase 3 เอาข้อมูลจาก server มาแสดงบนหน้าจอได้ยังไง ตั้งแต่ Provider → Store → Auto-save → Layout ใช้เวลาอ่านประมาณ 10-15 นาที",
+  "ref": "main",
+  "steps": [
+    {
+      "directory": "src/app",
+      "title": "ภาพรวม — เริ่มที่ src/app",
+      "description": "โปรเจกต์นี้ใช้ Next.js App Router ทุกหน้าจะอยู่ในโฟลเดอร์ `src/app/`\n\n- `layout.tsx` = กรอบหน้าจอที่ครอบทุกหน้า (เหมือนเลย์เอาต์หนังสือ)\n- `page.tsx` = redirect ไป `/builder` ทันที\n- `builder/page.tsx` = หน้า builder จริง\n- `api/trpc/[trpc]/route.ts` = ประตูรับ API request"
+    },
+    {
+      "file": "src/app/layout.tsx",
+      "line": 32,
+      "title": "Step 1 — TRPCProvider ครอบทุกหน้า",
+      "description": "บรรทัดนี้คือหัวใจสำคัญ — `<TRPCProvider>` ครอบ `{children}` ทำให้ **ทุกหน้าในแอปสามารถเรียก API ผ่าน tRPC ได้**\n\n**ทำไมถึงทำแบบนี้?**\nเหมือนกับการเปิดสัญญาณ WiFi ไว้ที่ระดับบ้าน ทุกห้อง (ทุกหน้า) ก็ใช้ internet ได้โดยไม่ต้องเปิดเอง"
+    },
+    {
+      "file": "src/lib/trpc/provider.tsx",
+      "line": 15,
+      "title": "Step 2 — TRPCProvider ทำงานยังไง",
+      "description": "`TRPCProvider` สร้างของ 2 ชิ้น:\n1. **QueryClient** — คลังเก็บ cache ของ server data (TanStack Query)\n2. **trpcClient** — ตัวส่ง HTTP request ไปหา `/api/trpc`\n\n**สังเกต:** ใช้ `useState(() => new QueryClient())` ไม่ใช่แค่ `new QueryClient()` — เพราะถ้า `new QueryClient()` ตรงๆ มันจะสร้างใหม่ทุก re-render ซึ่งจะล้าง cache ทิ้ง!\n\nFileที่เกี่ยวข้อง: `src/lib/trpc/client.ts`"
+    },
+    {
+      "file": "src/store/builder-store.ts",
+      "line": 41,
+      "title": "Step 3 — Zustand Store คือ \"ความจำ\" ของแอป",
+      "description": "ทุก action ของ user (เพิ่ม table, เพิ่ม condition ฯลฯ) จะเก็บไว้ที่นี่ก่อน แล้วค่อย sync ไป database\n\n**อ่านแค่ส่วนนี้:** `create<BuilderStore>()((set) => ({...}))` นี่คือ Zustand pattern\n- `create` = สร้าง store\n- `set` = function สำหรับอัปเดต state\n- ทุกอย่างที่ return ออกมาคือ state + actions\n\nคิดว่า store เหมือน \"whiteboard\" — ทุก component อ่านและเขียนได้โดยตรง"
+    },
+    {
+      "file": "src/store/builder-store.ts",
+      "line": 50,
+      "title": "Step 4 — isDirty flag คือตัวชี้ว่า \"มีอะไรยังไม่ save\"",
+      "description": "**สังเกตความต่าง:**\n```\nsetState: (state) => set({ state, isDirty: false })  // โหลดจาก DB\nsetName:  (name)  => set({ name,  isDirty: true  })  // user แก้เอง\n```\n\n`setState` (โหลดจาก DB) → `isDirty = false` — ไม่มีอะไรต้อง save\n`setName`, `addTable`, ฯลฯ (user action) → `isDirty = true` — มีของใหม่รอ save\n\nตรรกะนี้สำคัญมาก ถ้าไม่มี flag นี้ แอปจะ save state เปล่าๆ กลับไป DB ตอน load หน้า"
+    },
+    {
+      "file": "src/hooks/use-auto-save.ts",
+      "line": 16,
+      "title": "Step 5 — useAutoSave hook คืออะไร",
+      "description": "Hook นี้ทำงาน 3 อย่าง:\n1. **watch** — จับตาดู `state` และ `isDirty`\n2. **debounce** — รอ 500ms หลังจาก user หยุดพิมพ์/แก้ไข\n3. **save** — ส่ง mutation ไป server ผ่าน tRPC\n\n**parameter `enabled`** — ส่ง `false` ตอนกำลังโหลดข้อมูลจาก DB (เพื่อไม่ให้ save state เปล่าทับของเดิม)\n\nเหมือนระบบ auto-save ใน Google Docs — save อัตโนมัติหลังหยุดพิมพ์สักครู่"
+    },
+    {
+      "file": "src/hooks/use-auto-save.ts",
+      "line": 49,
+      "title": "Step 6 — Race condition fix (อ่านตรงนี้สำคัญมาก)",
+      "description": "**ปัญหาเดิม (ก่อน fix):**\nถ้า user กด save → mutation กำลังบิน → user แก้อีกครั้ง → ถ้า check ว่า isPending แล้ว return ออก → การแก้ครั้งที่ 2 จะ **หาย** เพราะ effect ไม่รู้ว่าต้องรันอีกครั้ง\n\n**วิธีแก้ (ที่เห็นอยู่):**\nใส่ `upsert.isPending` ใน deps array → เมื่อ mutation เสร็จ (isPending: true→false) effect จะ **re-run อัตโนมัติ** และเห็นว่า isDirty=true จึง save อีกรอบ\n\nนี่คือตัวอย่าง race condition ที่แก้ได้โดยใช้ React reactivity แทนการเพิ่ม logic ซับซ้อน"
+    },
+    {
+      "file": "src/app/builder/page.tsx",
+      "line": 5,
+      "title": "Step 7 — Builder page (entry point)",
+      "description": "ไฟล์นี้เป็น **Server Component** (ไม่มี `'use client'`) — render ที่ server ก่อน\n\nครอบ 2 ชั้น:\n1. `<ErrorBoundary>` — ถ้า component ลูกพัง ทั้งหน้าไม่ crash\n2. `<Suspense>` — แสดง Loading ขณะที่ `useSearchParams()` ถูก resolve\n\n**ทำไมต้องมี Suspense?**\n`useSearchParams()` ใน Next.js 15+ ต้องการ Suspense boundary ไม่งั้น build จะ error"
+    },
+    {
+      "file": "src/components/ui/error-boundary.tsx",
+      "line": 14,
+      "title": "Step 8 — ErrorBoundary กันแอปพัง",
+      "description": "`ErrorBoundary` เป็น **class component** (หนึ่งในไม่กี่กรณีที่ยังต้องใช้ class ใน React)\n\n**ทำงานยังไง:**\n- React เรียก `getDerivedStateFromError()` อัตโนมัติเมื่อ child component โยน error\n- ถ้า `hasError = true` → render fallback UI แทน\n- กด Retry → `setState({ hasError: false })` → React render children ใหม่\n\nฟีเจอร์ error boundaries ยังไม่มีเป็น hook — ต้องใช้ class เท่านั้น"
+    },
+    {
+      "file": "src/components/builder/BuilderClient.tsx",
+      "line": 19,
+      "title": "Step 9 — BuilderClient โหลดและ hydrate store",
+      "description": "ขั้นตอนการโหลด formula:\n```\n?id มีใน URL → query DB → data กลับมา\n         ↓\nuseEffect → setState(data.state)  ← isDirty ไม่ถูก set\n         ↓\nsetAutoSaveEnabled(true)  ← ตอนนี้ auto-save จึงเริ่มทำงาน\n```\n\n**hydratedRef.current** — ป้องกัน hydration ซ้ำถ้า `data` เปลี่ยน reference\n\n**ถ้าไม่มี ?id** → `autoSaveEnabled = true` ตั้งแต่แรก → save แล้วได้ id → push ขึ้น URL"
+    },
+    {
+      "file": "src/components/builder/BuilderShell.tsx",
+      "line": 36,
+      "title": "Step 10 — BuilderShell คือโครงหน้าจอ",
+      "description": "Layout แบ่งเป็น 2 ส่วน:\n1. **Header (sticky)** — ชื่อ formula + SaveIndicator + ปุ่ม RUN\n2. **Main** — 5 panels เรียงกัน: Field → Condition → Actions → Result → Preview\n\nตอนนี้ panels ทั้งหมดเป็น **stub** (placeholder) — จะถูกแทนที่ด้วยของจริงใน Phase 4-8\n\n`divide-y divide-zinc-200` ทำให้มีเส้นแบ่งระหว่าง panels โดยไม่ต้องเพิ่ม border ทีละตัว"
+    },
+    {
+      "file": "src/components/builder/BuilderShell.tsx",
+      "line": 14,
+      "title": "Step 11 — SaveIndicator auto-dismiss",
+      "description": "`SaveIndicator` แสดงสถานะ save แบบ real-time:\n- `'saving'` → \"Saving...\" (สีเทา)\n- `'saved'` → \"Saved\" (สีเขียว) แล้วหายไปเองใน 2 วินาที\n- `'error'` → \"Error saving\" (สีแดง)\n- `'idle'` → ไม่แสดงอะไรเลย\n\n**เทคนิค auto-dismiss:**\n`useEffect` จับ `saveStatus === 'saved'` → setTimeout 2000ms → `setSaveStatus('idle')`\nreturn cleanup ล้าง timeout เมื่อ status เปลี่ยนก่อนหมดเวลา (เช่น save อีกครั้งก่อน 2 วิ)"
+    },
+    {
+      "title": "จบทัวร์ Phase 3 — ก้าวต่อไปคือ Phase 4",
+      "description": "ตอนนี้คุณเข้าใจแล้วว่า Phase 3 ทำอะไร:\n\n✅ **TRPCProvider** ครอบแอปทั้งหมดให้ทุกหน้าเรียก API ได้\n✅ **Zustand Store** เก็บ BuilderState ในหน่วยความจำ พร้อม `isDirty` flag\n✅ **useAutoSave** debounce 500ms แล้ว sync ไป DB อัตโนมัติ\n✅ **BuilderClient** โหลดและ hydrate store จาก DB โดยไม่ trigger save ซ้ำ\n✅ **ErrorBoundary** ป้องกันแอปพังทั้งหน้าถ้า component ลูก error\n✅ **BuilderShell** โครงหน้าจอพร้อม SaveIndicator และ 5 panel stubs\n\n**Phase 4 ถัดไป:** FieldPanel จะมีของจริง — สร้าง/ลบ Table cards + add/remove fields"
+    }
+  ]
+}
