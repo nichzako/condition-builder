@@ -1,24 +1,37 @@
 import { z } from 'zod'
 
+// --- Named limits (coding-standards: no magic numbers) ---
+
+export const BUILDER_LIMITS = {
+  TABLES: 50,
+  CONDITIONS: 200,
+  RESULTS: 50,
+  FIELDS_PER_TABLE: 100,
+  FORMULA_DEPTH: 20,
+  STR_ID: 128,
+  STR_NAME: 200,
+  STR_LABEL: 255,
+} as const
+
 // --- Primitive schemas ---
 
 export const FieldDefSchema = z.object({
-  id: z.string(),
-  name: z.string(),
+  id: z.string().max(BUILDER_LIMITS.STR_ID),
+  name: z.string().max(BUILDER_LIMITS.STR_NAME),
   dataType: z.enum(['number', 'string', 'boolean']),
 })
 
 export const TableSourceSchema = z.object({
-  id: z.string(),
-  name: z.string(),
+  id: z.string().max(BUILDER_LIMITS.STR_ID),
+  name: z.string().max(BUILDER_LIMITS.STR_NAME),
   type: z.enum(['table', 'custom']),
-  fields: z.array(FieldDefSchema),
+  fields: z.array(FieldDefSchema).max(BUILDER_LIMITS.FIELDS_PER_TABLE),
 })
 
 export const FieldRefSchema = z.object({
-  tableId: z.string(),
-  fieldId: z.string(),
-  label: z.string(), // "TableName.FieldName" — computed on creation
+  tableId: z.string().max(BUILDER_LIMITS.STR_ID),
+  fieldId: z.string().max(BUILDER_LIMITS.STR_ID),
+  label: z.string().max(BUILDER_LIMITS.STR_LABEL),
 })
 
 export const LiteralValueSchema = z.union([z.string(), z.number(), z.boolean()])
@@ -32,7 +45,7 @@ export const OperatorSchema = z.enum([
 ])
 
 export const ConditionSchema = z.object({
-  id: z.string(),
+  id: z.string().max(BUILDER_LIMITS.STR_ID),
   left: FieldRefSchema,
   operator: OperatorSchema,
   right: z.union([FieldRefSchema, LiteralValueSchema]),
@@ -60,18 +73,40 @@ export const FormulaNodeSchema: z.ZodType<FormulaNode> = z.lazy(() =>
   ])
 )
 
+// Depth guard for recursive AST — prevents stack overflow on crafted payloads (WR-02)
+function isFormulaDepthOk(node: FormulaNode, depth: number): boolean {
+  if (depth > BUILDER_LIMITS.FORMULA_DEPTH) return false
+  if (node.type === 'operation') {
+    return isFormulaDepthOk(node.left, depth + 1) && isFormulaDepthOk(node.right, depth + 1)
+  }
+  if (node.type === 'percent') {
+    return isFormulaDepthOk(node.node, depth + 1)
+  }
+  return true
+}
+
 // --- Result & top-level state ---
 
-export const ResultFormulaSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  expression: FormulaNodeSchema,
-})
+export const ResultFormulaSchema = z
+  .object({
+    id: z.string().max(BUILDER_LIMITS.STR_ID),
+    name: z.string().max(BUILDER_LIMITS.STR_NAME),
+    expression: FormulaNodeSchema,
+  })
+  .superRefine((data, ctx) => {
+    if (!isFormulaDepthOk(data.expression, 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Formula tree exceeds maximum depth of ${BUILDER_LIMITS.FORMULA_DEPTH}`,
+        path: ['expression'],
+      })
+    }
+  })
 
 export const BuilderStateSchema = z.object({
-  tables: z.array(TableSourceSchema).max(50),
-  conditions: z.array(ConditionSchema).max(200),
-  results: z.array(ResultFormulaSchema).max(50),
+  tables: z.array(TableSourceSchema).max(BUILDER_LIMITS.TABLES),
+  conditions: z.array(ConditionSchema).max(BUILDER_LIMITS.CONDITIONS),
+  results: z.array(ResultFormulaSchema).max(BUILDER_LIMITS.RESULTS),
 })
 
 // --- Parse helpers ---
