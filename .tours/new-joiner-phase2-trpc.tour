@@ -1,0 +1,89 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Phase 2 — tRPC Routers (สำหรับ Developer มือใหม่)",
+  "description": "ทัวร์ชั้น API ทั้งหมดของ Condition Builder — ตั้งแต่ตั้งค่า tRPC, สร้าง endpoints, ป้องกัน race condition ด้วย transaction จนถึง client-side Provider ที่ React ใช้ดึงข้อมูล",
+  "ref": "main",
+  "steps": [
+    {
+      "directory": "src/server",
+      "title": "จุดเริ่มต้น — โฟลเดอร์ server ทั้งหมด",
+      "description": "โฟลเดอร์นี้คือ 'ครัวหลังบ้าน' ของแอป — ทุกอย่างที่ทำงานบน server ก่อนส่งผลไปให้ browser\n\nมีแค่ 3 ส่วนหลัก:\n- `trpc.ts` — ตั้งค่า tRPC ครั้งเดียวแล้วใช้ทั้งโปรเจกต์\n- `root.ts` — รวม routers ทั้งหมดไว้ที่เดียว\n- `routers/formula.ts` — endpoint จริงๆ สำหรับ CRUD Formula\n\n**tRPC คืออะไร?** คือ library ที่ทำให้ TypeScript รู้ว่า API endpoint รับ/ส่งข้อมูลอะไร — ไม่ต้องเขียน type ซ้ำทั้ง client และ server ต่างจาก REST API ทั่วไปที่ต้องอธิบายซ้ำทั้งสองฝั่ง"
+    },
+    {
+      "file": "src/server/trpc.ts",
+      "line": 4,
+      "title": "initTRPC.create — เปิดเครื่องยนต์ tRPC",
+      "description": "```typescript\nconst t = initTRPC.create({\n  transformer: superjson,\n})\n```\n\nบรรทัดนี้คือ 'เปิดสวิตช์' tRPC — ทำแค่ครั้งเดียวทั้งโปรเจกต์\n\n**`transformer: superjson` คืออะไร?**\n\nปัญหา: JSON ธรรมดา (`JSON.stringify`) ไม่รู้จัก `Date`, `Map`, `Set` — ส่ง Date ไปจะกลายเป็น string\n\nsuperjson แก้ปัญหานี้ — serialize ข้อมูลพิเศษได้ครบ แล้ว client-side ก็ต้องใช้ superjson เดียวกันตอน deserialize\n\nGotcha: ถ้าลืมใส่ transformer ใน client แต่ server มี (หรือกลับกัน) จะ error แปลกๆ ตอน runtime"
+    },
+    {
+      "file": "src/server/trpc.ts",
+      "line": 8,
+      "title": "router + publicProcedure — เลโก้สองชิ้นที่ใช้ทุกที่",
+      "description": "```typescript\nexport const router = t.router\nexport const publicProcedure = t.procedure\n```\n\nสองบรรทัดนี้คือสิ่งที่ไฟล์อื่นๆ import ไปใช้เสมอ:\n\n- **`router`** — ใช้สร้าง 'กล่อง' รวม endpoints เช่น `router({ get: ..., upsert: ... })`\n- **`publicProcedure`** — ใช้สร้าง endpoint ตัวเดียว เช่น `publicProcedure.input(z.object({...})).query(...)`\n\n`public` หมายความว่า ใครก็เรียกได้ (ไม่ต้อง auth) — Phase 3+ อาจเพิ่ม `protectedProcedure` ที่ตรวจ token ก่อน\n\nถ้าอยากเพิ่ม middleware (เช่น rate limiting, logging) ให้ใส่ที่นี่ ไม่ต้องแก้ทุก endpoint"
+    },
+    {
+      "file": "src/lib/schema.ts",
+      "line": 5,
+      "title": "BUILDER_LIMITS — ค่า limit ทั้งหมดอยู่ที่เดียว",
+      "description": "```typescript\nexport const BUILDER_LIMITS = {\n  TABLES: 50,\n  CONDITIONS: 200,\n  RESULTS: 50,\n  FORMULA_DEPTH: 20,\n  ...\n} as const\n```\n\nนี่คือสิ่งที่เพิ่มจาก code review — แทนที่จะเขียน `.max(50)` แบบ 'ตัวเลขลอยๆ' ทั่วโค้ด ให้รวมไว้ที่นี่ที่เดียว\n\n**ทำไมต้องมี limit?** ป้องกัน user (หรือคนร้าย) ส่ง formula tree ที่ซ้อนลึก 10,000 ชั้น — ถ้าไม่มี limit Zod จะ parse ไปเรื่อยๆ จน memory เต็มหรือ stack overflow\n\n`as const` ทำให้ TypeScript รู้ว่าตัวเลขเป็น literal type เช่น `50` ไม่ใช่แค่ `number` — ป้องกันการแก้โดยไม่ตั้งใจ"
+    },
+    {
+      "file": "src/server/root.ts",
+      "line": 4,
+      "title": "appRouter — สมุดโทรศัพท์ของ API ทั้งหมด",
+      "description": "```typescript\nexport const appRouter = router({\n  formula: formulaRouter,\n})\n\nexport type AppRouter = typeof appRouter\n```\n\nไฟล์นี้ทำหน้าที่เดียว: **รวม routers** ทั้งหมดไว้ใต้ชื่อ namespace\n\n`formula: formulaRouter` หมายความว่า endpoint ทุกตัวใน formulaRouter จะถูกเรียกว่า `formula.get`, `formula.upsert`, `formula.addTable` ฯลฯ\n\n**`AppRouter` type** คือสิ่งที่ client-side import ไปรู้ว่า API มี endpoint อะไรบ้าง TypeScript จะ error ถ้า client เรียก endpoint ที่ไม่มีจริง หรือส่งข้อมูลผิด type — ทำงานก่อน runtime เลย\n\nเมื่อ Phase 3+ มี router ใหม่ (เช่น `auth`, `user`) ก็แค่เพิ่มที่นี่บรรทัดเดียว"
+    },
+    {
+      "file": "src/server/routers/formula.ts",
+      "line": 13,
+      "title": "requireState — ยาม QC ก่อนใช้ข้อมูลจาก DB",
+      "description": "```typescript\nfunction requireState(raw: unknown) {\n  const state = safeParseBuilderState(raw)\n  if (!state) {\n    throw new TRPCError({\n      code: 'INTERNAL_SERVER_ERROR',\n      message: 'Formula state is corrupt',\n    })\n  }\n  return state\n}\n```\n\nปัญหาที่แก้: Prisma return `Formula.state` เป็น `unknown` (เพราะ column เป็น Json ไม่รู้รูปร่าง) — ถ้า data ใน DB เสียหายและเราใช้ต่อเลยจะ error แปลกๆ ที่หาสาเหตุยาก\n\n`safeParseBuilderState` ใช้ Zod `safeParse` — ถ้าผ่านคืน data, ถ้าไม่ผ่านคืน null (ไม่ throw เอง)\n\n`requireState` รับ null นั้นแล้วแปลงเป็น TRPCError ที่ client จัดการได้ถูกต้อง — ไม่ใช่ Zod error ดิบๆ ที่อาจ leak โครงสร้าง schema ออกไป"
+    },
+    {
+      "file": "src/server/routers/formula.ts",
+      "line": 25,
+      "title": "requireValidState — ยาม QC ก่อนเขียน data กลับไป DB",
+      "description": "```typescript\nfunction requireValidState(updated: z.infer<typeof BuilderStateSchema>) {\n  const result = safeParseBuilderState(updated)\n  if (!result) {\n    throw new TRPCError({\n      code: 'BAD_REQUEST',\n      message: 'Operation would exceed builder limits',\n    })\n  }\n  return result\n}\n```\n\nทำไมต้องมีฟังก์ชันนี้ด้วย? ลองนึกภาพว่า Formula มีตาราง 50 ตัวอยู่แล้ว (ครบ limit) แล้ว user กด 'Add Table' อีก\n\n- `addTable` สร้าง `updated = { ...state, tables: [...state.tables, newTable] }` — ตอนนี้มี 51 ตาราง\n- ถ้าไม่ validate ก็จะ insert 51 ตารางลง DB ทำให้ BuilderStateSchema.max(50) ไม่มีผล\n- `requireValidState` re-validate ผ่าน BuilderStateSchema อีกครั้ง — ถ้าเกิน limit ก็ throw ก่อน write"
+    },
+    {
+      "file": "src/server/routers/formula.ts",
+      "line": 37,
+      "title": "formula.get — ดึงข้อมูล Formula จาก DB",
+      "description": "```typescript\nget: publicProcedure\n  .input(z.object({ id: z.string() }))\n  .query(async ({ input }) => {\n    const formula = await db.formula.findUnique({ where: { id: input.id } })\n    if (!formula) return null\n    return {\n      id: formula.id,\n      name: formula.name,\n      state: requireState(formula.state),\n      updatedAt: formula.updatedAt,\n    }\n  }),\n```\n\nใน tRPC มีแค่สองประเภท:\n- **`.query()`** = อ่านข้อมูล (เหมือน GET ใน REST) — ไม่เปลี่ยน DB\n- **`.mutation()`** = เปลี่ยนข้อมูล (เหมือน POST/PUT/DELETE) — เขียน DB\n\n`return null` แทน throw error เมื่อหา Formula ไม่เจอ — ทำให้ client ตรวจสอบง่ายกว่า (`if (!data)` แทน `try/catch`)\n\nสังเกตว่า `requireState` ถูกเรียกก่อน return — ป้องกัน corrupt data ออกไปถึง client"
+    },
+    {
+      "file": "src/server/routers/formula.ts",
+      "line": 61,
+      "title": "db.$transaction — ป้องกัน Race Condition ใน upsert",
+      "description": "```typescript\nif (input.id) {\n  return db.$transaction(async (tx) => {\n    const existing = await tx.formula.findUnique({ where: { id: input.id } })\n    if (!existing) {\n      throw new TRPCError({ code: 'NOT_FOUND', message: 'Formula not found' })\n    }\n    return tx.formula.update({ ... })\n  })\n}\n```\n\n**Race condition คืออะไร?** ถ้าไม่ใช้ transaction:\n1. Request A: `findUnique` → เจอ formula\n2. Request B: ลบ formula นั้นทิ้ง\n3. Request A: `update` → formula ไม่อยู่แล้ว → Prisma error P2025 แบบไม่คาดคิด\n\n`db.$transaction` รวม find + update ไว้ใน transaction เดียว — DB lock record ระหว่างนั้น request อื่นรอก่อน ไม่มีโอกาส interleave\n\nทุก mutation ที่ต้อง 'อ่านแล้วเขียน' จะใช้ pattern นี้เสมอ"
+    },
+    {
+      "file": "src/server/routers/formula.ts",
+      "line": 83,
+      "title": "db.$transaction ใน addTable — Read-Modify-Write Pattern",
+      "description": "```typescript\naddTable: publicProcedure\n  .input(z.object({ id: z.string(), table: TableSourceSchema }))\n  .mutation(async ({ input }) =>\n    db.$transaction(async (tx) => {\n      const formula = await tx.formula.findUnique({ where: { id: input.id } })\n      if (!formula) throw new TRPCError({ code: 'NOT_FOUND', ... })\n      const state = requireState(formula.state)\n      const updated = requireValidState({ ...state, tables: [...state.tables, input.table] })\n      return tx.formula.update({ where: { id: input.id }, data: { state: updated } })\n    }),\n  ),\n```\n\nนี่คือ **Read-Modify-Write Pattern** ที่ใช้ซ้ำใน addCondition, addResult ด้วย:\n\n1. **อ่าน** — ดึง formula ปัจจุบันจาก DB (ภายใน transaction)\n2. **แก้** — สร้าง state ใหม่แบบ immutable (`{ ...state, tables: [...] }`) ไม่แตะ object เดิม\n3. **ตรวจ** — `requireValidState` เช็ค limit ก่อน write\n4. **เขียน** — update กลับไป DB (ยังอยู่ใน transaction เดียวกัน)\n\nสังเกต `removeTable`, `removeCondition`, `removeResult` ไม่ต้อง `requireValidState` เพราะการลบไม่เพิ่มจำนวน — ไม่มีโอกาสเกิน limit"
+    },
+    {
+      "file": "src/app/api/trpc/[trpc]/route.ts",
+      "line": 4,
+      "title": "HTTP Handler — ประตูที่ browser เรียกเข้ามา",
+      "description": "```typescript\nconst handler = (req: Request) =>\n  fetchRequestHandler({\n    endpoint: '/api/trpc',\n    req,\n    router: appRouter,\n    createContext: () => ({}),\n    onError: ({ error, path }) => {\n      if (error.code === 'INTERNAL_SERVER_ERROR') {\n        console.error(`tRPC error on [${path}]:`, error)\n      }\n    },\n  })\n\nexport { handler as GET, handler as POST }\n```\n\nไฟล์นี้คือ 'ประตูหน้าบ้าน' — Next.js App Router จะส่ง request ที่มา URL `/api/trpc/*` มาที่นี่\n\nชื่อโฟลเดอร์ `[trpc]` คือ dynamic segment — `/api/trpc/formula.get`, `/api/trpc/formula.upsert` จะถูก route มาที่ handler เดียวกันทั้งหมด แล้ว tRPC แยกเองว่าจะเรียก procedure ไหน\n\n`export { handler as GET, handler as POST }` — tRPC ใช้ GET สำหรับ query, POST สำหรับ mutation\n\n`onError` log เฉพาะ INTERNAL_SERVER_ERROR ที่ไม่คาดคิด — error ที่ client ส่งผิด (NOT_FOUND, BAD_REQUEST) ไม่ต้อง log"
+    },
+    {
+      "file": "src/lib/trpc/client.ts",
+      "line": 4,
+      "title": "createTRPCReact — factory สร้าง React hooks",
+      "description": "```typescript\nexport const trpc = createTRPCReact<AppRouter>()\n```\n\nบรรทัดเดียวนี้สร้าง React hooks ทั้งหมดที่ต้องการ:\n\n```typescript\n// ตัวอย่างใน Phase 3+ (ยังไม่มีตอนนี้)\nconst { data } = trpc.formula.get.useQuery({ id: formulaId })\nconst upsert = trpc.formula.upsert.useMutation()\n```\n\nสิ่งที่น่าทึ่ง: TypeScript รู้ว่า `trpc.formula.get.useQuery()` ต้องรับ `{ id: string }` และ return `{ state: BuilderState, ... } | null` — โดยอ่านจาก `AppRouter` type เลย ไม่ต้องเขียน type เพิ่มเอง\n\nถ้าแก้ router บน server (เพิ่ม field ใน return, เปลี่ยน input) TypeScript จะ error ที่ client ทันที ก่อน build"
+    },
+    {
+      "file": "src/lib/trpc/provider.tsx",
+      "line": 15,
+      "title": "TRPCProvider — ห่อ App ด้วย context ที่ทุก hook ต้องการ",
+      "description": "```typescript\nexport function TRPCProvider({ children }: { children: React.ReactNode }) {\n  const [queryClient] = useState(() => new QueryClient())\n  const [trpcClient] = useState(() =>\n    trpc.createClient({\n      links: [\n        httpBatchLink({\n          url: `${getBaseUrl()}/api/trpc`,\n          transformer: superjson,\n        }),\n      ],\n    }),\n  )\n\n  return (\n    <trpc.Provider client={trpcClient} queryClient={queryClient}>\n      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>\n    </trpc.Provider>\n  )\n}\n```\n\nทำไม `useState(() => new QueryClient())` ไม่ใช่แค่ `new QueryClient()`?\n- React อาจ re-render หลายครั้ง — ถ้า `new QueryClient()` อยู่นอก useState จะสร้างใหม่ทุก render\n- `useState(() => ...)` รัน initializer ครั้งเดียว ตลอด lifetime ของ component\n\n**`httpBatchLink`** รวม request หลายๆ ตัวที่ยิงพร้อมกันไปใน HTTP call เดียว — ประหยัด network รอบมาก\n\n**Phase 3** จะครอบ `src/app/layout.tsx` ด้วย `TRPCProvider` นี้ แล้วทุก component ในแอปจะใช้ `trpc.*` hooks ได้เลย"
+    },
+    {
+      "title": "ถัดไป — Phase 3: Frontend Foundation",
+      "description": "Phase 2 สร้าง 'ชั้น API' เรียบร้อยแล้ว สิ่งที่มีตอนนี้:\n\n✅ tRPC init พร้อม superjson transformer\n✅ Formula router: get, upsert, addTable/remove, addCondition/remove, addResult/remove\n✅ Race condition ป้องกันด้วย db.$transaction ทุก mutation\n✅ Error handling: TRPCError, safeParseBuilderState, onError logger\n✅ BUILDER_LIMITS: limit ทั้งหมดอยู่ที่เดียว\n✅ HTTP handler: GET/POST ที่ /api/trpc\n✅ tRPC React client + Provider พร้อมใช้\n\n**Phase 3 จะสร้าง:**\n- ครอบ `layout.tsx` ด้วย `TRPCProvider`\n- Builder route `src/app/(builder)/page.tsx`\n- Zustand store `src/store/builder-store.ts`\n- Auto-save hook (debounce 500ms → trpc.formula.upsert)\n- Layout shell: header bar + 4 panels\n\nอ่าน `docs/onboarding-phase2.md` สำหรับคำอธิบายแบบชาวบ้านและ cheat sheet การใช้งาน"
+    }
+  ]
+}
