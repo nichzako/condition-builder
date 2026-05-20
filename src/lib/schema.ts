@@ -69,14 +69,22 @@ export const ResultFormulaSchema = z.object({
 })
 
 export const BuilderStateSchema = z.object({
-  tables: z.array(TableSourceSchema),
-  conditions: z.array(ConditionSchema),
-  results: z.array(ResultFormulaSchema),
+  tables: z.array(TableSourceSchema).max(50),
+  conditions: z.array(ConditionSchema).max(200),
+  results: z.array(ResultFormulaSchema).max(50),
 })
 
 // --- Parse helpers ---
 
-/** Parse raw DB Json output (Prisma returns Json as unknown) into typed BuilderState */
+/** Parse raw DB Json output — throws ZodError on failure (use only in trusted contexts) */
 export function parseBuilderState(raw: unknown): z.infer<typeof BuilderStateSchema> {
   return BuilderStateSchema.parse(raw)
+}
+
+/** Safe parse — returns null on failure instead of throwing */
+export function safeParseBuilderState(
+  raw: unknown,
+): z.infer<typeof BuilderStateSchema> | null {
+  const result = BuilderStateSchema.safeParse(raw)
+  return result.success ? result.data : null
 }
