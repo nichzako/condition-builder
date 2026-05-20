@@ -9,7 +9,10 @@ import type { BuilderState } from '../src/types'
 loadEnv({ path: path.resolve(process.cwd(), '.env.local') })
 loadEnv({ path: path.resolve(process.cwd(), '.env') })
 
-const pool = new Pool({ connectionString: process.env.DIRECT_URL })
+const connectionString = process.env.DIRECT_URL
+if (!connectionString) throw new Error('DIRECT_URL is not set — run: vercel env pull .env.local')
+
+const pool = new Pool({ connectionString })
 const adapter = new PrismaPg(pool)
 const db = new PrismaClient({ adapter })
 
@@ -52,7 +55,7 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error(e)
+    console.error('Seed failed:', e instanceof Error ? e.message : String(e))
     process.exit(1)
   })
-  .finally(() => db.$disconnect())
+  .finally(async () => { await db.$disconnect() })

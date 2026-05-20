@@ -6,11 +6,14 @@ import { config as loadEnv } from 'dotenv'
 loadEnv({ path: path.resolve(process.cwd(), '.env.local') })
 loadEnv({ path: path.resolve(process.cwd(), '.env') })
 
+const directUrl = process.env.DIRECT_URL
+if (!directUrl) throw new Error('DIRECT_URL is not set — run: vercel env pull .env.local')
+
 export default defineConfig({
   schema: path.join('prisma', 'schema.prisma'),
   datasource: {
     // ใช้ DIRECT_URL (non-pooled) สำหรับ migrations
-    url: process.env.DIRECT_URL!,
+    url: directUrl,
   },
   migrations: {
     seed: 'tsx ./prisma/seed.ts',

@@ -73,3 +73,10 @@ export const BuilderStateSchema = z.object({
   conditions: z.array(ConditionSchema),
   results: z.array(ResultFormulaSchema),
 })
+
+// --- Parse helpers ---
+
+/** Parse raw DB Json output (Prisma returns Json as unknown) into typed BuilderState */
+export function parseBuilderState(raw: unknown): z.infer<typeof BuilderStateSchema> {
+  return BuilderStateSchema.parse(raw)
+}

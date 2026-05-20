@@ -12,4 +12,7 @@ model Formula {
   state     Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([updatedAt])
+  @@index([name])
 }
