@@ -10,8 +10,11 @@ const DEBOUNCE_MS = 500
  * Watches isDirty+state; debounces 500ms then persists via tRPC upsert.
  * Pass enabled=false while hydrating from DB to prevent saving stale empty state.
  *
- * markClean() is called BEFORE mutate() so that any new user action during
- * the in-flight request correctly re-marks isDirty and triggers a follow-up save.
+ * Race-condition design:
+ * - upsert.isPending is in deps: when mutation completes (false→true→false), the effect
+ *   re-runs and catches any dirty state accumulated during the in-flight request.
+ * - markClean() fires BEFORE mutate() so new user actions during in-flight correctly re-dirty.
+ * - mutateRef pins the latest mutate fn to avoid stale closure inside setTimeout.
  */
 export function useAutoSave(enabled: boolean) {
   const {
@@ -34,32 +37,31 @@ export function useAutoSave(enabled: boolean) {
     onError: () => setSaveStatus('error'),
   })
 
-  // Refs avoid stale closures inside setTimeout
   const formulaIdRef = useRef(formulaId)
   const nameRef = useRef(name)
   const stateRef = useRef(state)
-  const isPendingRef = useRef(false)
+  const mutateRef = useRef(upsert.mutate) // M-3: always-current mutate fn
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => { formulaIdRef.current = formulaId }, [formulaId])
   useEffect(() => { nameRef.current = name }, [name])
   useEffect(() => { stateRef.current = state }, [state])
-  useEffect(() => { isPendingRef.current = upsert.isPending }, [upsert.isPending])
+  useEffect(() => { mutateRef.current = upsert.mutate }, [upsert.mutate])
 
   useEffect(() => {
     if (!enabled || !isDirty) return
 
+    // H-1 fix: don't schedule while a request is in-flight.
+    // upsert.isPending is in deps, so when it flips false the effect re-runs
+    // and picks up any dirty state that accumulated during the request.
+    if (upsert.isPending) return
+
     if (timerRef.current) clearTimeout(timerRef.current)
 
     timerRef.current = setTimeout(() => {
-      // Guard: skip if a mutation is already in-flight (avoids concurrent saves)
-      if (isPendingRef.current) return
-
-      // Mark clean BEFORE mutating so any new user action during the request
-      // correctly re-sets isDirty and schedules a follow-up save.
-      markClean()
+      markClean()         // mark clean BEFORE mutating; new actions re-dirty correctly
       setSaveStatus('saving')
-      upsert.mutate({
+      mutateRef.current({
         ...(formulaIdRef.current ? { id: formulaIdRef.current } : {}),
         name: nameRef.current,
         state: stateRef.current,
@@ -69,6 +71,8 @@ export function useAutoSave(enabled: boolean) {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, isDirty, enabled, name])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Intentional: markClean/setSaveStatus are stable Zustand setters (omitted to prevent loop).
+    // upsert.isPending intentionally included — re-runs after in-flight completes (H-1 fix).
+  }, [state, isDirty, enabled, name, upsert.isPending])
 }

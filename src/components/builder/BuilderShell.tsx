@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useBuilderStore } from '@/store/builder-store'
 import { FieldPanel } from '@/components/builder/FieldPanel'
 import { ConditionPanel } from '@/components/builder/ConditionPanel'
@@ -8,8 +9,18 @@ import { ResultPanel } from '@/components/builder/ResultPanel'
 import { PreviewBox } from '@/components/builder/PreviewBox'
 import { Button } from '@/components/ui/button'
 
+const SAVED_DISMISS_MS = 2000
+
 function SaveIndicator() {
-  const { saveStatus } = useBuilderStore()
+  const { saveStatus, setSaveStatus } = useBuilderStore()
+
+  // M-2: auto-dismiss "Saved" label after 2s
+  useEffect(() => {
+    if (saveStatus !== 'saved') return
+    const t = setTimeout(() => setSaveStatus('idle'), SAVED_DISMISS_MS)
+    return () => clearTimeout(t)
+  }, [saveStatus, setSaveStatus])
+
   if (saveStatus === 'idle') return null
   const label =
     saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Error saving'
