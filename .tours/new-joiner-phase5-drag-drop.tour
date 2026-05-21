@@ -1,0 +1,77 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Phase 5 — Drag & Drop Foundation (New Joiner)",
+  "description": "ทำความเข้าใจระบบ Drag & Drop ของ Condition Builder ตั้งแต่ต้นจนจบ เหมาะสำหรับ Dev ที่เพิ่งเข้ามาในโปรเจกต์",
+  "ref": "main",
+  "steps": [
+    {
+      "directory": "src/components/dnd",
+      "title": "บ้านของระบบ Drag & Drop",
+      "description": "ไฟล์ทั้ง 3 ในโฟลเดอร์นี้คือหัวใจของระบบลาก-วาง\n\n- **BuilderDndContext.tsx** — เหมือน 'สมองกลาง' ที่รู้ว่าตอนนี้กำลังลากอะไรอยู่ และส่งไปให้ใครรับ\n- **DraggableField.tsx** — ทำให้ field chip กลายเป็นของที่ลากได้\n- **DropZone.tsx** — ช่องสำหรับวางของที่ลาก พร้อม highlight เมื่อของลอยอยู่เหนือ\n\nทั้ง 3 ไฟล์ทำงานร่วมกัน แต่แยก concern ออกจากกันชัดเจน"
+    },
+    {
+      "file": "src/components/dnd/BuilderDndContext.tsx",
+      "line": 61,
+      "title": "BuilderDndContext — สมองกลางของระบบ",
+      "description": "`BuilderDndContext` คือ component ที่ครอบ layout ทั้งหมด\n\nมันทำ 3 อย่างพร้อมกัน:\n1. **ส่ง `DndContext`** จาก @dnd-kit ให้ทุก component ลูก\n2. **เก็บ `activeFieldRef`** ว่าตอนนี้กำลังลาก field ไหนอยู่\n3. **แสดง `DragOverlay`** คือ chip ผีที่ลอยตาม cursor ตอน drag\n\nทุก panel (FieldPanel, ConditionPanel, ResultPanel) อยู่ข้างใน context นี้หมด"
+    },
+    {
+      "file": "src/components/dnd/BuilderDndContext.tsx",
+      "line": 63,
+      "title": "Handler Registry — สมุดโทรศัพท์ของ Drop Slots",
+      "description": "`handlers` คือ `Map` ที่เก็บว่า 'slot ชื่อนี้' → 'ให้เรียก function นี้เมื่อมีของถูกวาง'\n\nทำงานเหมือนสมุดโทรศัพท์:\n- DropZone แต่ละตัว **ลงทะเบียน** ตัวเองพร้อม callback ตอน mount\n- ตอน drag วางลง BuilderDndContext จะ **เปิดสมุด** หา slot ที่ตรงกัน แล้วโทรหา\n\nใช้ `useRef` แทน `useState` เพราะไม่ต้องการให้ component re-render ตอน slot ลงทะเบียน"
+    },
+    {
+      "file": "src/components/dnd/BuilderDndContext.tsx",
+      "line": 65,
+      "title": "registerHandler — วิธีลงทะเบียน Drop Slot",
+      "description": "`registerHandler` รับ 2 อย่าง: `slotId` (ชื่อ slot) และ `handler` (function ที่จะเรียกเมื่อมีของถูกวาง)\n\nสิ่งที่ต้องสังเกต:\n- **return cleanup function** — ตอน component unmount, slot จะถูกลบออกจาก Map อัตโนมัติ (ป้องกัน memory leak)\n- `useCallback([], [])` ทำให้ `registerHandler` ไม่เปลี่ยน reference ระหว่าง render ซึ่งสำคัญมากสำหรับ `useEffect` deps"
+    },
+    {
+      "file": "src/components/dnd/BuilderDndContext.tsx",
+      "line": 43,
+      "title": "useDndDropHandler — Hook สำหรับ Phase 6",
+      "description": "นี่คือ hook ที่ Phase 6 จะใช้บ่อยมาก\n\nวิธีใช้:\n```tsx\nuseDndDropHandler('condition-1-left', (fieldRef) => {\n  updateCondition(id, { left: fieldRef })\n})\n```\n\nที่ไม่ใช้ `useCallback` wrap `onDrop` ก่อนส่งเข้า — เพราะ hook นี้แก้ปัญหานั้นอยู่แล้วด้วย `onDropRef.current = onDrop` (line 46) ซึ่งทำให้เรียก callback ล่าสุดเสมอ โดยไม่ต้อง re-register ใหม่ทุกครั้งที่ parent render"
+    },
+    {
+      "file": "src/components/dnd/BuilderDndContext.tsx",
+      "line": 53,
+      "title": "DragGhost — chip ผีที่ลอยตาม cursor",
+      "description": "`DragGhost` คือ UI ที่แสดงตอนกำลัง drag อยู่ — เป็น pill สีดำ (zinc-800) แสดงชื่อ field\n\nอยู่ใน `DragOverlay` ของ @dnd-kit ซึ่ง render เป็น portal ไปที่ `document.body` โดยอัตโนมัติ ทำให้ลอยอยู่เหนือ element ทุกอย่างโดยไม่มีปัญหา z-index\n\n`dropAnimation={null}` (line 97) หมายถึงพอวางแล้ว ghost หายทันที ไม่มี animation กลับ"
+    },
+    {
+      "file": "src/components/dnd/BuilderDndContext.tsx",
+      "line": 74,
+      "title": "onDragStart / onDragEnd — flow หลักของการ drag",
+      "description": "**onDragStart** (line 74):\n- ตรวจสอบว่า data ที่ติดมากับของที่ลากเป็น FieldRef จริงไหม (ผ่าน `isFieldRef` type guard)\n- ถ้าใช่ → set `activeFieldRef` เพื่อแสดง DragGhost\n\n**onDragEnd** (line 79):\n- เคลียร์ `activeFieldRef` ก่อน (ghost หายทันที)\n- ตรวจว่าวางลง slot ไหน (`over.id`)\n- เปิดสมุดโทรศัพท์ เรียก handler ของ slot นั้น\n\n**onDragCancel** (line 94): กด Escape หรือ scroll หลุด → เคลียร์ ghost"
+    },
+    {
+      "file": "src/components/dnd/DraggableField.tsx",
+      "line": 12,
+      "title": "DraggableField — ทำให้ chip ลากได้",
+      "description": "`DraggableField` เป็นแค่ wrapper div ที่เพิ่มความสามารถ drag ให้ `children`\n\nจุดสำคัญ:\n- **`id`** = `field:${tableId}:${fieldId}` — prefix `field:` ป้องกัน id ชนกับ slot id ใน Phase 6\n- **`data: { fieldRef }`** — payload ที่ติดไปกับของที่ลาก BuilderDndContext จะอ่านจากตรงนี้\n- **`{...listeners}`** — event handlers จาก @dnd-kit (pointerdown, etc.)\n- **`{...attributes}`** — role='button', tabindex='0', aria-* สำหรับ accessibility\n\nใช้ `distance: 8px` activation constraint ดังนั้นการ click ปุ่ม × ใน chip จะยังทำงานได้ปกติ"
+    },
+    {
+      "file": "src/components/dnd/DropZone.tsx",
+      "line": 14,
+      "title": "DropZone — ช่องรับของที่ลาก",
+      "description": "`DropZone` ทำ 2 อย่างพร้อมกัน:\n\n1. **เป็น drop target** ผ่าน `useDroppable({ id })` — @dnd-kit จะรู้ว่า element นี้รับของได้\n2. **ลงทะเบียน handler** ผ่าน `useDndDropHandler(id, onDrop)` — ตอนมีของถูกวาง BuilderDndContext จะเรียก `onDrop` ให้อัตโนมัติ\n\n**3 visual states:**\n- `isOver` (กำลังลอยอยู่เหนือ) → border-blue-400 พื้นหลังฟ้า\n- `currentValue` (มีค่าแล้ว) → bg-zinc-100 ดูเหมือน chip ปกติ\n- ว่าง → border-dashed สีเทาจาง"
+    },
+    {
+      "file": "src/components/builder/BuilderShell.tsx",
+      "line": 54,
+      "title": "Integration — BuilderDndContext ครอบ panels ทั้งหมด",
+      "description": "`BuilderDndContext` ครอบอยู่รอบ `<main>` ที่มีทุก panel\n\nทำไมไม่ครอบที่ `<header>` ด้วย? เพราะ header (RUN button, title) ไม่มี drag/drop logic เลย ไม่จำเป็นต้องอยู่ใน context\n\nทำไมไม่ครอบที่ `src/app/layout.tsx`? เพราะ DndContext ควร scope ให้แคบที่สุดที่ยังครอบ consumer ทั้งหมด — ตามหลัก 'system boundary' ใน architecture"
+    },
+    {
+      "file": "src/components/builder/FieldPanel.tsx",
+      "line": 185,
+      "title": "FieldPanel — วิธี wrap FieldChip ด้วย DraggableField",
+      "description": "ทุก field chip ใน FieldPanel ถูกครอบด้วย `<DraggableField>` โดยส่ง `fieldRef` ที่สร้างขึ้นจาก:\n- `tableId` — id ของ table นั้น\n- `fieldId` — id ของ field นั้น\n- `label` — ชื่อที่แสดง เช่น `'Table 1.Revenue'`\n\nLabel นี้จะติดไปกับ ghost chip ตอน drag และจะแสดงใน DropZone ตอนวางแล้ว\n\n**สังเกต:** `DraggableField` เป็น wrapper แยก ไม่ได้แก้ `FieldChip` โดยตรง — ทำให้ `FieldChip` ยังเป็น pure display component ที่ reuse ได้"
+    },
+    {
+      "title": "พร้อมสำหรับ Phase 6 — Condition Panel",
+      "description": "ตอนนี้ระบบ drag & drop พร้อมแล้ว Phase 6 จะสร้าง ConditionPanel โดยใช้:\n\n```tsx\n// ConditionPanel.tsx (Phase 6)\n<DropZone\n  id={`condition-${cond.id}-left`}\n  currentValue={cond.left}\n  onDrop={(fieldRef) => updateCondition(cond.id, { left: fieldRef })}\n/>\n```\n\nไม่ต้องแตะ BuilderDndContext เลย — แค่วาง `<DropZone>` ในตำแหน่งที่ต้องการ ระบบจะจัดการให้เอง\n\n**ไฟล์ที่ต้องดูต่อ:**\n- `src/components/builder/ConditionPanel.tsx` — Phase 6 target\n- `src/lib/schema.ts` — Zod schema ของ Condition, FieldRef\n- `src/store/builder-store.ts` — `updateCondition` action"
+    }
+  ]
+}
