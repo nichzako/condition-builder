@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useBuilderStore } from '@/store/builder-store'
 import { DropZone } from '@/components/dnd/DropZone'
+import { OperatorSchema } from '@/lib/schema'
 import type { Condition, FieldRef, LiteralValue, Operator } from '@/types'
 
 const OPERATOR_LABELS: Record<Operator, string> = {
@@ -32,7 +33,10 @@ function OperatorSelect({ value, onChange }: OperatorSelectProps) {
   return (
     <select
       value={value}
-      onChange={(e) => onChange(e.target.value as Operator)}
+      onChange={(e) => {
+        const result = OperatorSchema.safeParse(e.target.value)
+        if (result.success) onChange(result.data)
+      }}
       className="text-xs border border-zinc-200 rounded px-2 py-1 bg-white text-zinc-700 focus:outline-none focus:border-zinc-400 cursor-pointer"
     >
       {OPERATORS.map((op) => (
