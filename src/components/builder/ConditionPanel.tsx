@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+
 import { useBuilderStore } from '@/store/builder-store'
 import { DropZone } from '@/components/dnd/DropZone'
 import { OperatorSchema } from '@/lib/schema'
@@ -82,45 +82,35 @@ function LiteralInput({ value, onChange, onSwitchToField }: LiteralInputProps) {
 
 interface RightSlotProps {
   conditionId: string
-  value: FieldRef | LiteralValue
-  onChange: (value: FieldRef | LiteralValue) => void
+  value: FieldRef | string | number
+  onChange: (value: FieldRef | string | number) => void
 }
 
 function RightSlot({ conditionId, value, onChange }: RightSlotProps) {
-  const [mode, setMode] = useState<'field' | 'literal'>(() =>
-    isFieldRef(value) ? 'field' : 'literal'
-  )
-  const [literalText, setLiteralText] = useState<string>(() =>
-    isFieldRef(value) ? '' : String(value)
-  )
   const slotId = `condition:${conditionId}:right`
 
-  useEffect(() => {
-    if (isFieldRef(value)) {
-      setMode('field')
-    } else {
-      setMode('literal')
-      setLiteralText(String(value))
-    }
-  }, [value])
+  // mode is fully derived from value — no local state needed.
+  // When value is a FieldRef → field mode; string | number → literal mode.
+  // External updates (undo, DB reset) are automatically reflected because
+  // mode is recomputed on every render from the prop.
+  const mode = isFieldRef(value) ? 'field' : 'literal'
 
   const switchToLiteral = () => {
-    setLiteralText('')
-    setMode('literal')
-    // do NOT call onChange here — wait for the user to type
+    // Write an empty string into the store — this drives value to '' on next render,
+    // which flips mode to 'literal' automatically. No local state required.
+    onChange('')
   }
 
   const switchToField = () => {
-    setMode('field')
     onChange(EMPTY_FIELD_REF)
   }
 
   if (mode === 'literal') {
+    const literalText = String(value)
     return (
       <LiteralInput
         value={literalText}
         onChange={(raw) => {
-          setLiteralText(raw)
           const numVal = Number(raw)
           onChange(raw !== '' && !isNaN(numVal) ? numVal : raw)
         }}
