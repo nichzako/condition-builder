@@ -14,6 +14,18 @@ import type { FieldRef } from '@/types'
 
 type DropHandler = (fieldRef: FieldRef) => void
 
+const DRAG_ACTIVATION_DISTANCE_PX = 8
+
+function isFieldRef(value: unknown): value is FieldRef {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as FieldRef).tableId === 'string' &&
+    typeof (value as FieldRef).fieldId === 'string' &&
+    typeof (value as FieldRef).label === 'string'
+  )
+}
+
 interface DndCtxValue {
   registerHandler: (slotId: string, handler: DropHandler) => () => void
   activeFieldRef: FieldRef | null
@@ -56,18 +68,19 @@ export function BuilderDndContext({ children }: { children: React.ReactNode }) {
   }, [])
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: DRAG_ACTIVATION_DISTANCE_PX } }),
   )
 
   const onDragStart = ({ active }: DragStartEvent) => {
-    setActiveFieldRef((active.data.current?.fieldRef as FieldRef) ?? null)
+    const fieldRef = active.data.current?.fieldRef
+    setActiveFieldRef(isFieldRef(fieldRef) ? fieldRef : null)
   }
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     setActiveFieldRef(null)
     if (!over) return
-    const fieldRef = active.data.current?.fieldRef as FieldRef | undefined
-    if (!fieldRef) return
+    const fieldRef = active.data.current?.fieldRef
+    if (!isFieldRef(fieldRef)) return
     handlers.current.get(over.id as string)?.(fieldRef)
   }
 

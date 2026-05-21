@@ -10,7 +10,7 @@ interface DraggableFieldProps {
 }
 
 export function DraggableField({ fieldRef, children }: DraggableFieldProps) {
-  const id = `${fieldRef.tableId}:${fieldRef.fieldId}`
+  const id = `field:${fieldRef.tableId}:${fieldRef.fieldId}`
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id,
     data: { fieldRef },

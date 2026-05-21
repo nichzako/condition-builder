@@ -17,7 +17,6 @@ interface FieldChipProps {
 
 function FieldChip({ field, onRemove }: FieldChipProps) {
   return (
-    // data-field-id: Phase 5 DraggableField reads this attribute
     <div
       className="flex items-center gap-1.5 px-2 py-1 rounded bg-zinc-100 text-xs text-zinc-700 group"
       data-field-id={field.id}
