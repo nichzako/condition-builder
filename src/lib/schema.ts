@@ -48,7 +48,7 @@ export const ConditionSchema = z.object({
   id: z.string().max(BUILDER_LIMITS.STR_ID),
   left: FieldRefSchema,
   operator: OperatorSchema,
-  right: z.union([FieldRefSchema, LiteralValueSchema]),
+  right: z.union([FieldRefSchema, z.string(), z.number()]),
 })
 
 // --- FormulaNode — recursive AST via z.lazy() ---
