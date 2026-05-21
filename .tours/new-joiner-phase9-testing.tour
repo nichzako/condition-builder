@@ -1,0 +1,140 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Phase 9 — Polish + Testing (มือใหม่)",
+  "description": "ทัวร์นี้พา Dev มือใหม่เดินทางผ่าน Phase 9 ทั้งหมด ตั้งแต่ตั้งค่า Vitest และ Playwright ไปจนถึงอ่าน test ทุกชั้น อ่านตามลำดับจะเข้าใจว่า 'test แต่ละชนิดทำงานยังไง และทำไมถึงเขียนแบบนี้'",
+  "ref": "main",
+  "steps": [
+    {
+      "directory": "src/lib",
+      "title": "Step 1: ภาพรวม Phase 9 — 'เราทดสอบอะไรบ้าง?'",
+      "description": "Phase 9 คือ Phase สุดท้ายของ Condition Builder\n\nก่อน Phase 9 — แอปทำงานได้แต่ยังไม่มี **ตาข่ายนิรภัย** ถ้าแก้โค้ดพลาดแล้วอะไรพัง จะรู้ก็ต่อเมื่อเปิด browser แล้วเห็นด้วยตา\n\nPhase 9 เพิ่ม 3 ชั้นของการทดสอบ:\n```\n1. Unit Tests (Vitest)\n   └── ทดสอบฟังก์ชันเล็กๆ แยกชิ้น เช่น คำนวณ 2+3=5 จริงไหม?\n\n2. E2E Tests (Playwright)\n   └── เปิด browser จริง คลิกปุ่มจริง ดูว่า UI ทำงานถูกต้องไหม\n\n3. Production Build\n   └── ทดสอบว่า build สำหรับ production ผ่านไม่มี error\n```\n\nโฟลเดอร์ `src/lib` ที่เราอยู่ตอนนี้มี unit tests 3 ไฟล์:\n- `formula-engine.test.ts` — ทดสอบ formula engine\n- `condition-evaluator.test.ts` — ทดสอบ condition evaluator\n- `schema.test.ts` — ทดสอบ Zod validation"
+    },
+    {
+      "file": "vitest.config.ts",
+      "line": 1,
+      "title": "Step 2: vitest.config.ts — 'กฎของห้องสอบ'",
+      "description": "ไฟล์นี้คือ configuration ของ Vitest — เหมือน 'กฎของห้องสอบ' ที่บอกว่า\n- ต้องรัน test ไฟล์ไหนบ้าง?\n- ใช้ environment อะไร?\n- ต้องผ่าน coverage เท่าไหร่?\n\n```typescript\nimport { defineConfig } from 'vitest/config'\nimport react from '@vitejs/plugin-react'\n```\n\nเหตุที่ต้อง import `react plugin` แม้ว่า test จะเป็น Node.js:\nVite ต้องรู้ว่านี่คือ React project เพื่อ handle JSX syntax ถูกต้อง\nถ้าไม่ใส่ plugin นี้ไว้ พอวันหนึ่งเพิ่ม component tests ที่มี JSX จะ error ทันที"
+    },
+    {
+      "file": "vitest.config.ts",
+      "selection": {
+        "start": { "line": 4, "character": 0 },
+        "end": { "line": 26, "character": 0 }
+      },
+      "title": "Step 3: resolve.tsconfigPaths + test config — 3 qจุดสำคัญ",
+      "description": "มี 3 จุดสำคัญใน config นี้:\n\n**จุด 1: `tsconfigPaths: true`**\n```typescript\nresolve: { tsconfigPaths: true }\n```\nทำให้ import แบบ `@/lib/schema` ทำงานได้ใน test\nโดยไม่ต้องติดตั้ง plugin เพิ่ม — Vite 6 มี built-in แล้ว\n\n**จุด 2: `include` + `exclude`**\n```typescript\ninclude: ['src/**/*.test.{ts,tsx}']\nexclude: ['e2e/**', 'node_modules/**']\n```\nบอก Vitest ให้รัน test เฉพาะใน `src/` เท่านั้น\nถ้าไม่มีบรรทัดนี้ Vitest จะวิ่งเข้าไปรัน `e2e/builder.spec.ts` (Playwright file) ด้วย แล้วเกิด error แปลกๆ\n\n**จุด 3: `globals: false`**\n```typescript\nglobals: false\n```\nบังคับให้ทุก test file `import { describe, it, expect } from 'vitest'` เอง\nไม่มีของฟรีจาก global — เขียน import ชัดเจน อ่านเข้าใจง่ายกว่า\n\n**จุด 4: coverage thresholds**\n```typescript\ncoverage: { thresholds: { lines: 80, functions: 80, branches: 80 } }\n```\nถ้า coverage ต่ำกว่า 80% → CI fail — เป็นตาข่ายกันไม่ให้ลืมเขียน test"
+    },
+    {
+      "file": "src/test/setup.ts",
+      "line": 1,
+      "title": "Step 4: setup.ts — 'ห้องเตรียมตัวก่อนสอบ'",
+      "description": "ไฟล์นี้รันก่อน test ทุกไฟล์เสมอ (กำหนดใน `setupFiles` ของ config)\n\n```typescript\n// @testing-library/jest-dom matchers — enable when component tests are added\n// import '@testing-library/jest-dom'\n```\n\nทำไม comment out ไว้?\n`@testing-library/jest-dom` เรียก `expect.extend(...)` ทันทีที่ import\nแต่ `expect` ไม่ได้อยู่ใน global scope เพราะ `globals: false`\n→ import ตรงนี้จะ crash ทุก test ด้วย `ReferenceError: expect is not defined`\n\nเมื่อไหร่จะเปิดใช้?\nตอนที่มี component tests และเปิด `globals: true` หรือ import `expect` จาก vitest ใน setup file โดยตรง\n\n**บทเรียน:** Library ที่ออกแบบมาสำหรับ Jest อาจทำงานต่างกับ Vitest ในโหมด strict imports"
+    },
+    {
+      "file": "src/lib/formula-engine.test.ts",
+      "selection": {
+        "start": { "line": 1, "character": 0 },
+        "end": { "line": 8, "character": 0 }
+      },
+      "title": "Step 5: formula-engine.test.ts — โครงสร้าง Test File",
+      "description": "```typescript\nimport { describe, it, expect } from 'vitest'\nimport { evaluateFormula, toNumber, type DataContext } from '@/lib/formula-engine'\nimport type { FormulaNode } from '@/types'\n```\n\n**3 บรรทัดแรก บอกเรื่องสำคัญมาก:**\n\n1. Import จาก `'vitest'` ชัดเจน — ไม่ใช้ global (ตามที่ globals:false กำหนด)\n2. Import เฉพาะสิ่งที่ต้องใช้ — ไม่ import ทั้งหมด\n3. ใช้ `@/lib/formula-engine` ไม่ใช่ relative path — เพราะ tsconfigPaths ทำให้ทำได้\n\n```typescript\nconst ctx: DataContext = {\n  t1: { f1: 10, f2: 5, f3: 'hello' },\n  t2: { f1: 3, f2: 0 },\n}\n```\n\n**Mock context** คือข้อมูลตัวอย่างที่ทุก test ใช้ร่วมกัน\nกำหนดครั้งเดียวด้านบน ไม่ต้องสร้างใหม่ในทุก test\n\nสังเกต: `f3: 'hello'` — เป็น string โดยตั้งใจ เพื่อทดสอบกรณี type ผิด"
+    },
+    {
+      "file": "src/lib/formula-engine.test.ts",
+      "selection": {
+        "start": { "line": 12, "character": 0 },
+        "end": { "line": 24, "character": 0 }
+      },
+      "title": "Step 6: Pattern AAA — 'Arrange, Act, Assert'",
+      "description": "```typescript\ndescribe('toNumber', () => {\n  it('returns number as-is', () => {\n    expect(toNumber(42, 'x')).toBe(42)\n  })\n\n  it('coerces numeric string', () => {\n    expect(toNumber('3.14', 'x')).toBeCloseTo(3.14)\n  })\n\n  it('throws on non-numeric string', () => {\n    expect(() => toNumber('abc', 'field')).toThrow('field is not a number: \"abc\"')\n  })\n})\n```\n\n**Pattern AAA (Arrange-Act-Assert):**\n- **Arrange** — เตรียมข้อมูล (ในนี้ inline)\n- **Act** — เรียกฟังก์ชัน `toNumber(42, 'x')`\n- **Assert** — ตรวจผลลัพธ์ `expect(...).toBe(42)`\n\n**3 test ครอบ 3 กรณี:**\n1. Happy path — ตัวเลขปกติ\n2. Type coercion — string ที่เป็นตัวเลขได้\n3. Error path — string ที่ไม่ใช่ตัวเลข → ต้อง throw\n\n**ทำไมทดสอบ error path?**\nถ้าวันหนึ่งแก้โค้ดแล้ว toNumber หยุด throw → test นี้จะ fail ทันที\nไม่ต้องรอจนผู้ใช้เจอปัญหา"
+    },
+    {
+      "file": "src/lib/formula-engine.test.ts",
+      "selection": {
+        "start": { "line": 115, "character": 0 },
+        "end": { "line": 147, "character": 0 }
+      },
+      "title": "Step 7: Operation Tests — ทดสอบ Edge Cases",
+      "description": "```typescript\nit('throws on division by zero', () => {\n  expect(() =>\n    evaluateFormula({ type: 'operation', op: '/', left: num(5), right: num(0) }, ctx),\n  ).toThrow('Division by zero')\n})\n```\n\nนี่คือ **edge case tests** — กรณีที่ถ้าลืม handle จะพังแบบเงียบ\n\n**ทำไม division by zero ต้องทดสอบ?**\nใน JavaScript: `5 / 0 === Infinity` (ไม่ throw!) → ถ้าส่งต่อไปคำนวณ\nผลลัพธ์สุดท้ายจะเป็น `Infinity` ที่ดูไม่ออก ผู้ใช้งงว่าเกิดอะไรขึ้น\n\n```typescript\nit('throws when left operand is a non-numeric string field', () => {\n  const node: FormulaNode = {\n    type: 'operation', op: '+',\n    left: { type: 'field', ref: { tableId: 't1', fieldId: 'f3', label: 't1.f3' } },\n    right: { type: 'literal', value: 1 },\n  }\n  expect(() => evaluateFormula(node, ctx)).toThrow('left operand is not a number')\n})\n```\n\nTest นี้ใช้ `f3: 'hello'` จาก mock context (Step 5)\nทดสอบว่าถ้า field เป็น string แล้วใช้บวกเลข → ต้องมี error message ชัดเจน\nไม่ใช่ `NaN` เงียบๆ"
+    },
+    {
+      "file": "src/lib/condition-evaluator.test.ts",
+      "selection": {
+        "start": { "line": 11, "character": 0 },
+        "end": { "line": 23, "character": 0 }
+      },
+      "title": "Step 8: Helper Functions ใน Test — ลด Boilerplate",
+      "description": "```typescript\nfunction cond(\n  left: Condition['left'],\n  operator: Condition['operator'],\n  right: Condition['right'],\n): Condition {\n  return { id: 'c1', left, operator, right }\n}\n\nconst fieldRef = (tableId: string, fieldId: string) => ({\n  tableId, fieldId, label: `${tableId}.${fieldId}`,\n})\n```\n\n**ทำไมต้องมี helper functions ใน test file?**\n\nแต่ละ test ต้องสร้าง `Condition` object ที่มีหลาย field\nถ้าสร้างทุกครั้ง test file จะยาวมากและอ่านยาก\n\nแทนที่จะเขียน:\n```typescript\n{ id: 'c1', left: { tableId: 't1', fieldId: 'score', label: 't1.score' }, operator: 'equal', right: 90 }\n```\n\nเขียนได้แค่:\n```typescript\ncond(fieldRef('t1', 'score'), 'equal', 90)\n```\n\n**Pattern นี้สำคัญมาก:** Test helpers ที่ดีทำให้ test อ่านได้เหมือนภาษาธรรมชาติ\n'cond(t1.score equals 90)' — ชัดเจน ไม่รกตา"
+    },
+    {
+      "file": "src/lib/condition-evaluator.test.ts",
+      "selection": {
+        "start": { "line": 41, "character": 0 },
+        "end": { "line": 44, "character": 0 }
+      },
+      "title": "Step 9: Type Safety Test — 'string 90' ≠ number 90",
+      "description": "```typescript\nit('returns false when string \"90\" strictly !== number 90', () => {\n  const ctx2: DataContext = { t1: { score: '90' } }\n  expect(evaluateCondition(cond(fieldRef('t1', 'score'), 'equal', 90), ctx2)).toBe(false)\n})\n```\n\nนี่คือ test ที่สำคัญที่สุดใน condition evaluator\n\n**ทำไม?**\nใน JavaScript: `'90' == 90` → `true` (loose equality, แย่มาก)\nแต่ `'90' === 90` → `false` (strict equality, ถูกต้อง)\n\nระบบเราใช้ `===` เสมอ เพราะ data type ต้องตรงกัน\n- ถ้า field เก็บ string `'90'` และ user ตั้ง condition `= 90` (number)\n- ระบบควร **ไม่ผ่าน** condition นี้ — type ต่างกัน\n\n**ทำไมต้องเขียน test นี้?**\nถ้าวันหนึ่งมีคนแก้ code เป็น `==` โดยไม่ตั้งใจ test นี้จะ fail ทันที\nก่อนที่โค้ดจะไปถึง production"
+    },
+    {
+      "file": "src/lib/schema.test.ts",
+      "selection": {
+        "start": { "line": 154, "character": 0 },
+        "end": { "line": 165, "character": 0 }
+      },
+      "title": "Step 10: Depth Guard Test + issues[0] Safety",
+      "description": "```typescript\nit('rejects tree exceeding depth limit', () => {\n  const result = ResultFormulaSchema.safeParse({\n    id: 'r1',\n    name: 'Result1',\n    expression: buildDeepNode(BUILDER_LIMITS.FORMULA_DEPTH + 1),\n  })\n  expect(result.success).toBe(false)\n  if (!result.success) {\n    expect(result.error.issues).toHaveLength(1)   // ← เช็คก่อน!\n    expect(result.error.issues[0].message).toContain('maximum depth')\n  }\n})\n```\n\n**ทำไมต้อง `toHaveLength(1)` ก่อน?**\n\nถ้าไม่เช็ค:\n```typescript\nresult.error.issues[0].message  // ❌ ถ้า issues = [] จะ crash: TypeError!\n```\n\nถ้า Zod ส่ง issues ว่างกลับมา (ซึ่งไม่น่าจะเป็น แต่ไม่มีใครรับประกัน 100%)\nโค้ดบรรทัดนี้จะ crash ด้วย TypeError ที่ไม่เกี่ยวกับสิ่งที่เราทดสอบเลย\n\n`toHaveLength(1)` เป็น 'guard' — ถ้า issues ว่าง จะ fail ด้วย error message ที่เข้าใจได้\nแทนที่จะ crash แบบงงๆ\n\n**หลักการ:** ก่อน access index 0 ของ array เสมอต้องรู้ว่า array ไม่ว่าง"
+    },
+    {
+      "file": "src/lib/schema.test.ts",
+      "selection": {
+        "start": { "line": 94, "character": 0 },
+        "end": { "line": 96, "character": 0 }
+      },
+      "title": "Step 11: Business Rule Test — Left ต้องเป็น FieldRef เสมอ",
+      "description": "```typescript\nit('rejects literal as left side — left must always be a FieldRef', () => {\n  expect(ConditionSchema.safeParse({ id: 'c1', left: 42, operator: 'equal', right: 42 }).success).toBe(false)\n})\n```\n\nนี่คือ **business rule test** — ทดสอบว่า schema บังคับ rule ของ business ได้จริง\n\n**Rule คืออะไร?**\nใน Condition Builder ฝั่งซ้าย (left) ของเงื่อนไขต้องเป็น **field** เสมอ\nเช่น `Score > 100` — `Score` ต้องเป็น field จาก table ไม่ใช่ตัวเลข\n\nทำไมถึงมี rule นี้?\n- ถ้า left เป็น literal เช่น `42 > 100` → มันไม่ขึ้นกับข้อมูลจริง ไม่มีประโยชน์\n- UI ก็ไม่รองรับ literal ทางซ้าย — schema ควร reflect ข้อจำกัดนี้\n\n**ทำไม test สำคัญ?**\nถ้า Zod schema เปลี่ยนแล้ว left กลายเป็น accept literal ได้\ntest นี้จะ fail → รู้ทันทีว่า business rule หายไปแล้ว"
+    },
+    {
+      "file": "playwright.config.ts",
+      "line": 1,
+      "title": "Step 12: playwright.config.ts — 'กฎของ E2E test'",
+      "description": "```typescript\nimport { defineConfig, devices } from '@playwright/test'\n\nexport default defineConfig({\n  testDir: './e2e',\n  fullyParallel: false,\n  workers: 1,\n  ...\n})\n```\n\n**E2E test ≠ Unit test:**\n- Unit test: รันบน Node.js ไม่มี browser\n- E2E test: เปิด browser จริง คลิกปุ่มจริง URL จริง\n\n**`workers: 1` ทำไม?**\nถ้ารัน parallel (หลาย worker พร้อมกัน) browser อาจ click ปุ่มซ้ำกัน หรือ interfere กัน\nสำหรับ Drag & Drop tests ที่ sensitive ต้องรัน 1 ทีละ test\n\n**`fullyParallel: false`** — สอดคล้องกัน ไม่รัน test ต่างไฟล์ parallel\n\n**`reuseExistingServer: !process.env.CI`**\nLocal: ถ้า dev server รันอยู่แล้ว → ใช้ต่อเลย ไม่ต้องเริ่มใหม่ (เร็วกว่า)\nCI: เริ่ม server ใหม่เสมอ (ไม่มี server รัน background)"
+    },
+    {
+      "file": "playwright.config.ts",
+      "selection": {
+        "start": { "line": 16, "character": 0 },
+        "end": { "line": 21, "character": 0 }
+      },
+      "title": "Step 13: Firefox CI-only — ทำไมถึงแยก browser ตาม environment?",
+      "description": "```typescript\nprojects: [\n  { name: 'chromium', use: { ...devices['Desktop Chrome'] } },\n  // Firefox requires system-level VC++ libs; enable on CI where they are installed\n  ...(process.env.CI ? [{ name: 'firefox', use: { ...devices['Desktop Firefox'] } }] : []),\n  { name: 'webkit',   use: { ...devices['Desktop Safari'] } },\n],\n```\n\n**ทำไม Firefox ถึงเป็น CI-only?**\n\nPlaywright's headless Firefox ต้องการ **Microsoft Visual C++ Runtime** ที่ติดตั้งระดับ OS\n- Windows local ของ dev ส่วนใหญ่ → ไม่มี → `spawn UNKNOWN` error ทันทีที่รัน\n- CI server (Linux) → มีพร้อม → รันได้ปกติ\n\n**`...spread` ใน array:**\n```typescript\n...(condition ? [item] : [])  // ← pattern นี้ใช้บ่อยมากใน JS\n```\nถ้า condition true → spread item เข้า array\nถ้า false → spread [] (array ว่าง) = ไม่เพิ่มอะไร\n\n**หลักการ:** Config ต้องสะท้อน environment จริง ไม่ใช่ ideal environment"
+    },
+    {
+      "file": "e2e/builder.spec.ts",
+      "line": 1,
+      "title": "Step 14: builder.spec.ts — โครงสร้าง E2E Test",
+      "description": "```typescript\nimport { test, expect } from '@playwright/test'\n\ntest.describe('Condition Builder — golden path', () => {\n  test.beforeEach(async ({ page }) => {\n    await page.goto('/builder')\n  })\n```\n\n**โครงสร้างสำคัญ:**\n\n`test.describe` — จัดกลุ่ม tests ที่เกี่ยวข้องกัน ชื่อ 'golden path' = เส้นทางหลักที่ผู้ใช้ใช้บ่อยที่สุด\n\n`test.beforeEach` — รันก่อนทุก test: ไปที่ `/builder` เสมอ\nทำไมต้อง navigate ทุกครั้ง? เพราะ test แต่ละตัวต้อง isolated — ไม่รับ state จาก test ก่อนหน้า\n\n**`async ({ page })` คืออะไร?**\n`page` คือ browser tab ที่ Playwright เปิดให้\nทุกการกระทำ (click, fill, navigate) เป็น async เพราะต้องรอให้ browser ทำงาน\n\n**Test file นี้แยกกับ `vitest.config.ts`:** Playwright มี config ของตัวเองที่ `playwright.config.ts`\nVitest จะไม่แตะไฟล์ `e2e/**` เลย (ดู `exclude` ใน vitest.config.ts)"
+    },
+    {
+      "file": "e2e/builder.spec.ts",
+      "selection": {
+        "start": { "line": 87, "character": 0 },
+        "end": { "line": 105, "character": 0 }
+      },
+      "title": "Step 15: Golden Path Test — RUN Evaluates a Literal Formula",
+      "description": "```typescript\ntest('RUN evaluates a literal formula and shows result in preview', async ({ page }) => {\n  await page.getByRole('button', { name: 'Add result' }).click()\n  await page.getByRole('button', { name: 'Switch to literal value' }).first().click()\n  const literalInput = page.getByLabel('Literal value').first()\n  await literalInput.fill('42')\n  await page.getByRole('button', { name: 'RUN' }).click()\n\n  const previewRegion = page.getByRole('region', { name: 'Preview' })\n  await expect(previewRegion.getByText('Results')).toBeVisible()\n  await expect(previewRegion.getByText('42')).toBeVisible()\n})\n```\n\nนี่คือ **Golden Path Test** — เส้นทางหลักที่สำคัญที่สุด\n\n**4 ขั้นตอน (จำลองผู้ใช้จริง):**\n1. เพิ่ม result\n2. สลับ input เป็น literal mode\n3. พิมพ์ `42`\n4. กด RUN → รอผล → ตรวจว่า '42' อยู่ใน Preview\n\n**`getByRole('region', { name: 'Preview' })`** — scoped assertion\nแทนที่จะหา '42' ทั้งหน้า (อาจ match input field อื่น)\nหาใน Preview region เท่านั้น → ไม่มี false positive\n\n**`await expect(...).toBeVisible()`** — รอจนกว่า element จะปรากฏ (deterministic)\nดีกว่า `await page.waitForTimeout(2000)` (flaky)"
+    },
+    {
+      "file": "e2e/builder.spec.ts",
+      "selection": {
+        "start": { "line": 109, "character": 0 },
+        "end": { "line": 113, "character": 0 }
+      },
+      "title": "Step 16: Responsive Test — ทดสอบ Tablet Width",
+      "description": "```typescript\ntest('renders correctly at tablet width (768px)', async ({ page }) => {\n  await page.setViewportSize({ width: 768, height: 1024 })\n  await expect(page.getByRole('button', { name: 'RUN' })).toBeVisible()\n  await expect(page.getByRole('region', { name: 'Fields' })).toBeVisible()\n})\n```\n\nTest เล็กๆ แต่สำคัญ — ตรวจว่า layout ไม่พังบน tablet\n\n**`setViewportSize`** — บอก browser ให้แสดงผลที่ขนาดจอ 768px\nเป็น breakpoint ที่ Tailwind ใช้ (`md:` prefix)\n\n**ทำไมต้องมี test นี้?**\nถ้าแก้ CSS แล้วทำให้ปุ่ม RUN หายไปบน tablet\ntest นี้จะ fail ทันที ก่อน deploy ขึ้น production\n\n**สิ่งที่ยังไม่ครอบ:** Mobile (375px) ยังไม่มี test — เป็น action item ที่รอ implement"
+    },
+    {
+      "title": "Step 17: จบ Phase 9 — โครงสร้าง Test ทั้งหมด",
+      "description": "คุณเดินทางผ่าน Phase 9 ครบแล้ว\n\n**ไฟล์ทั้งหมดที่เพิ่มใน Phase 9:**\n```\nvitest.config.ts                     → ตั้งค่า Vitest\nplaywright.config.ts                  → ตั้งค่า Playwright\nsrc/test/setup.ts                     → global test setup\nsrc/lib/\n  formula-engine.test.ts              → 19 tests\n  condition-evaluator.test.ts         → 14 tests\n  schema.test.ts                      → 34 tests\ne2e/\n  builder.spec.ts                     → 9 E2E tests\n```\n\n**รัน tests:**\n```bash\nnpm run test              # Vitest unit tests (67 tests)\nnpm run test:e2e          # Playwright E2E (9 tests, chromium + webkit)\nnpm run build             # Production build verify\n```\n\n**ลำดับความสำคัญของ tests:**\n```\nUnit Tests    → เร็ว (< 1 วิ) เช็ค logic ทุก edge case\nE2E Tests     → ช้า (~ 30 วิ) เช็ค user flow จริงผ่าน browser\nBuild Check   → เช็ค TypeScript + bundle ไม่มี error\n```\n\n**Phase 9 เป็น Phase สุดท้าย — แอป production-ready แล้ว**\nดูรายละเอียดทั้งหมดที่ `PLAN.md`"
+    }
+  ]
+}
