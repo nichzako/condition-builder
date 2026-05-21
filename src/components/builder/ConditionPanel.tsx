@@ -207,9 +207,9 @@ export function ConditionPanel() {
   const handleAdd = () => {
     addCondition({
       id: crypto.randomUUID(),
-      left: { ...EMPTY_FIELD_REF },
+      left: EMPTY_FIELD_REF,
       operator: 'equal',
-      right: { ...EMPTY_FIELD_REF },
+      right: EMPTY_FIELD_REF,
     })
   }
 
