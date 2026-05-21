@@ -26,6 +26,16 @@ describe('FieldDefSchema', () => {
   it('rejects missing name', () => {
     expect(FieldDefSchema.safeParse({ id: 'f1', dataType: 'number' }).success).toBe(false)
   })
+
+  it('rejects id exceeding STR_ID limit', () => {
+    const longId = 'x'.repeat(BUILDER_LIMITS.STR_ID + 1)
+    expect(FieldDefSchema.safeParse({ id: longId, name: 'Score', dataType: 'number' }).success).toBe(false)
+  })
+
+  it('rejects name exceeding STR_NAME limit', () => {
+    const longName = 'x'.repeat(BUILDER_LIMITS.STR_NAME + 1)
+    expect(FieldDefSchema.safeParse({ id: 'f1', name: longName, dataType: 'number' }).success).toBe(false)
+  })
 })
 
 // --- TableSourceSchema ---
@@ -39,6 +49,15 @@ describe('TableSourceSchema', () => {
 
   it('rejects invalid type', () => {
     expect(TableSourceSchema.safeParse({ ...base, type: 'remote' }).success).toBe(false)
+  })
+
+  it('rejects table with too many fields', () => {
+    const fields = Array.from({ length: BUILDER_LIMITS.FIELDS_PER_TABLE + 1 }, (_, i) => ({
+      id: `f${i}`,
+      name: `Field ${i}`,
+      dataType: 'number',
+    }))
+    expect(TableSourceSchema.safeParse({ ...base, fields }).success).toBe(false)
   })
 })
 
@@ -70,6 +89,10 @@ describe('ConditionSchema', () => {
 
   it('rejects unknown operator', () => {
     expect(ConditionSchema.safeParse({ id: 'c1', left, operator: 'between', right: 5 }).success).toBe(false)
+  })
+
+  it('rejects literal as left side — left must always be a FieldRef', () => {
+    expect(ConditionSchema.safeParse({ id: 'c1', left: 42, operator: 'equal', right: 42 }).success).toBe(false)
   })
 })
 
@@ -136,6 +159,7 @@ describe('ResultFormulaSchema depth guard', () => {
     })
     expect(result.success).toBe(false)
     if (!result.success) {
+      expect(result.error.issues).toHaveLength(1)
       expect(result.error.issues[0].message).toContain('maximum depth')
     }
   })

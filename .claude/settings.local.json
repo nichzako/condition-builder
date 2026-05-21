@@ -43,7 +43,21 @@
       "Skill(frontend-design:*)",
       "Skill(frontend-patterns)",
       "Skill(frontend-patterns:*)",
-      "mcp__Claude_Preview__preview_start"
+      "mcp__Claude_Preview__preview_start",
+      "Bash(npx eslint *)",
+      "Bash(mkdir -p \"D:/MyProject/ConditionBuilder/.claude/reviews\")",
+      "Bash(node __TRACKED_VAR__/.claude/get-shit-done/bin/gsd-tools.cjs commit 'fix\\(06\\): WR-01 re-sync RightSlot state when value prop changes externally' --files src/components/builder/ConditionPanel.tsx)",
+      "Bash(ls -la docs)",
+      "Bash(ls -la .claude)",
+      "Skill(post-mortem)",
+      "Skill(post-mortem:*)",
+      "Bash(Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue)",
+      "Bash(node \"C:\\\\Users\\\\nichchanp\\\\.claude\\\\get-shit-done\\\\bin\\\\gsd-tools.cjs\" init phase-op \"8\")",
+      "Bash(ls \"C:\\\\Users\\\\nichchanp\\\\.claude\\\\get-shit-done\\\\workflows\\\\\" 2>&1 | head -20)",
+      "Bash(npx vitest *)",
+      "Bash(npx playwright *)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d['version']\\)\")",
+      "Bash(Select-String -Pattern '\"scripts\"' -A 10)"
     ]
   }
 }

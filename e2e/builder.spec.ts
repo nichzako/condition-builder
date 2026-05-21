@@ -98,9 +98,10 @@ test.describe('Condition Builder — golden path', () => {
     // Click RUN
     await page.getByRole('button', { name: 'RUN' }).click()
 
-    // Wait for preview to show results
-    await expect(page.getByText('Results')).toBeVisible()
-    await expect(page.getByText('42')).toBeVisible()
+    // Wait for preview to show results — scoped to prevent false positives from other page text
+    const previewRegion = page.getByRole('region', { name: 'Preview' })
+    await expect(previewRegion.getByText('Results')).toBeVisible()
+    await expect(previewRegion.getByText('42')).toBeVisible()
   })
 
   // --- Responsive ---

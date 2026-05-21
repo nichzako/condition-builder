@@ -43,7 +43,10 @@ export function useDndContext(): DndCtxValue {
 export function useDndDropHandler(slotId: string, onDrop: DropHandler) {
   const { registerHandler } = useDndContext()
   const onDropRef = useRef(onDrop)
-  onDropRef.current = onDrop
+
+  useEffect(() => {
+    onDropRef.current = onDrop
+  })
 
   useEffect(() => {
     return registerHandler(slotId, (fieldRef) => onDropRef.current(fieldRef))

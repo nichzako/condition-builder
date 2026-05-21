@@ -34,7 +34,7 @@ export const FieldRefSchema = z.object({
   label: z.string().max(BUILDER_LIMITS.STR_LABEL),
 })
 
-export const LiteralValueSchema = z.union([z.string(), z.number(), z.boolean()])
+export const LiteralValueSchema = z.union([z.string(), z.number()])
 
 export const OperatorSchema = z.enum([
   'equal',
@@ -43,6 +43,8 @@ export const OperatorSchema = z.enum([
   'not_equal',
   'contains',
 ])
+
+export const FormulaOpSchema = z.enum(['+', '-', '*', '/', '%'])
 
 export const ConditionSchema = z.object({
   id: z.string().max(BUILDER_LIMITS.STR_ID),
@@ -56,7 +58,7 @@ export const ConditionSchema = z.object({
 export type FormulaNode =
   | { type: 'field'; ref: z.infer<typeof FieldRefSchema> }
   | { type: 'literal'; value: z.infer<typeof LiteralValueSchema> }
-  | { type: 'operation'; op: '+' | '-' | '*' | '/' | '%'; left: FormulaNode; right: FormulaNode }
+  | { type: 'operation'; op: z.infer<typeof FormulaOpSchema>; left: FormulaNode; right: FormulaNode }
   | { type: 'percent'; node: FormulaNode }
 
 export const FormulaNodeSchema: z.ZodType<FormulaNode> = z.lazy(() =>
@@ -65,7 +67,7 @@ export const FormulaNodeSchema: z.ZodType<FormulaNode> = z.lazy(() =>
     z.object({ type: z.literal('literal'), value: LiteralValueSchema }),
     z.object({
       type: z.literal('operation'),
-      op: z.enum(['+', '-', '*', '/', '%']),
+      op: FormulaOpSchema,
       left: FormulaNodeSchema,
       right: FormulaNodeSchema,
     }),

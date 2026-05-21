@@ -1,0 +1,83 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Phase 6 — ConditionPanel (สำหรับ Developer มือใหม่)",
+  "description": "ทัวร์โค้ดของ Phase 6: ConditionPanel — ส่วนที่ให้ผู้ใช้กำหนดเงื่อนไข (IF field A > field B) พร้อม Drag & Drop และ Auto-save",
+  "ref": "main",
+  "steps": [
+    {
+      "directory": "src/components/builder",
+      "title": "จุดเริ่มต้น — Builder Components",
+      "description": "โฟลเดอร์นี้เก็บ Panel ทุกส่วนของ Builder ได้แก่ `FieldPanel`, `ConditionPanel`, `ActionPanel`, `ResultPanel` และ `PreviewBox` แต่ละไฟล์รับผิดชอบแค่ส่วนของตัวเองเท่านั้น Phase 6 นี้เราจะโฟกัสที่ `ConditionPanel.tsx` ซึ่งเป็น section ที่ผู้ใช้สร้างเงื่อนไขแบบ \"Field A [operator] Field B\" หรือ \"Field A [operator] ค่าตัวเลข/ข้อความ\""
+    },
+    {
+      "file": "src/components/builder/ConditionPanel.tsx",
+      "line": 19,
+      "title": "EMPTY_FIELD_REF — ตัวแทนของช่องว่าง",
+      "description": "`EMPTY_FIELD_REF` คือ object ที่ใช้แทนช่อง Field ที่ยังไม่ได้เลือก (`tableId` และ `fieldId` เป็น string ว่าง) แนวคิดนี้ง่ายมาก: แทนที่จะใช้ `null` (ซึ่ง TypeScript จะบ่นบ่อย) เราใช้ object ที่มีค่าว่าง ๆ แทน แล้วเช็คด้วย `tableId !== ''` ว่าเลือกแล้วหรือยัง"
+    },
+    {
+      "file": "src/components/builder/ConditionPanel.tsx",
+      "line": 21,
+      "title": "isFieldRef — Type Guard สำหรับแยกประเภทค่า",
+      "description": "ฝั่งขวา (right side) ของเงื่อนไขเป็นได้สองแบบ: `FieldRef` (drag field มาวาง) หรือ string/number (พิมพ์ค่าตรง ๆ) ฟังก์ชัน `isFieldRef` ช่วย TypeScript รู้ว่าค่าที่ได้เป็นแบบไหน วิธีตรวจสอบง่ายมาก: ถ้ามี key ชื่อ `tableId` อยู่ใน object → เป็น FieldRef แน่นอน ถ้าเป็น string หรือ number → เป็น literal value"
+    },
+    {
+      "file": "src/components/builder/ConditionPanel.tsx",
+      "line": 32,
+      "title": "OperatorSelect — Dropdown เลือกตัวดำเนินการ",
+      "description": "Component นี้ render `<select>` ให้เลือก operator (Equal, Greater Than, Less Than, ฯลฯ) สังเกตบรรทัด 37: ใช้ `OperatorSchema.safeParse(e.target.value)` ก่อน ไม่ได้ cast ตรง ๆ ว่า `as Operator` เพราะถ้า cast ตรง TypeScript ไม่ช่วยจับ bug ให้ถ้า option ใน HTML กับ type ไม่ตรงกัน — safeParse จับได้ตอน runtime"
+    },
+    {
+      "file": "src/components/builder/ConditionPanel.tsx",
+      "line": 59,
+      "title": "LiteralInput — ช่องพิมพ์ค่าตรง ๆ",
+      "description": "เมื่อผู้ใช้ต้องการเปรียบเทียบกับค่าคงที่ (เช่น \"มากกว่า 100\") ใช้ component นี้แทน DropZone มีปุ่ม ⊞ เล็ก ๆ (บรรทัด 72) สำหรับสลับกลับไปเป็นโหมด Drag & Drop `onSwitchToField` callback เป็นตัวบอกให้ parent เปลี่ยนโหมด โดยตัว LiteralInput เองไม่ต้องรู้ว่าจะเปลี่ยนยังไง — แค่โทรกลับไปบอก parent"
+    },
+    {
+      "file": "src/components/builder/ConditionPanel.tsx",
+      "line": 89,
+      "title": "RightSlot — หัวใจของ Phase 6 (Fully-Controlled Pattern)",
+      "description": "นี่คือส่วนที่ซับซ้อนที่สุดของ Phase 6 สิ่งสำคัญที่ต้องเข้าใจ: `mode` ที่บรรทัด 96 ไม่ได้ใช้ `useState` แต่คำนวณจาก `value` prop ทุก render เลย นี่เรียกว่า \"Fully-Controlled Component\" ถ้าใช้ `useState(initialMode)` จะมีปัญหา: React จำค่าตอน mount แล้วไม่อัปเดตอีก แม้ parent จะส่ง value ใหม่มา แต่ถ้า `mode = isFieldRef(value) ? 'field' : 'literal'` แบบนี้ ทุกครั้งที่ parent อัปเดต store → component render ใหม่ → mode คำนวณใหม่อัตโนมัติ"
+    },
+    {
+      "file": "src/components/builder/ConditionPanel.tsx",
+      "line": 98,
+      "title": "switchToLiteral — วิธีสลับโหมดแบบถูกต้อง",
+      "description": "`switchToLiteral` ทำงานโดยเรียก `onChange('')` เพื่อเขียนค่าว่างลง store โดยตรง เมื่อ store เปลี่ยน → component render ใหม่ → `isFieldRef('')` คืนค่า `false` → `mode` กลายเป็น `'literal'` อัตโนมัติ ไม่มี local state ไม่มี useEffect ไม่มีการ sync มือ — data flow เป็นทางเดียว store → props → UI ตลอด"
+    },
+    {
+      "file": "src/components/dnd/DropZone.tsx",
+      "line": 14,
+      "title": "DropZone — พื้นที่รับ Field ที่ Drag มาวาง",
+      "description": "เมื่อโหมดเป็น `'field'` ใน RightSlot จะแสดง `DropZone` component นี้ทำสองอย่าง: 1) ใช้ `useDroppable` จาก @dnd-kit เพื่อบอกว่าช่องนี้รับ drag ได้ 2) ใช้ `useDndDropHandler` เพื่อลงทะเบียน callback สำหรับรับ FieldRef เมื่อมีการ drop ลงมา `id` prop สำคัญมาก — ต้องไม่ซ้ำกันทั่วทั้งหน้า (เราใช้รูปแบบ `condition:{id}:left` และ `condition:{id}:right`)"
+    },
+    {
+      "file": "src/components/builder/ConditionPanel.tsx",
+      "line": 152,
+      "title": "ConditionRow — แถวเงื่อนไขแต่ละอัน",
+      "description": "Component นี้รวมทุกอย่างมาไว้ด้วยกัน: DropZone (ฝั่งซ้าย) + OperatorSelect (กลาง) + RightSlot (ฝั่งขวา) + ปุ่มลบ แต่ละ row ไม่มี state ของตัวเอง — ทุกอย่างรับมาจาก `condition` prop และส่งการเปลี่ยนแปลงกลับผ่าน `onUpdate` callback pattern นี้เรียกว่า \"lifting state up\" — state อยู่ที่ store ส่วน component แค่แสดงผลและรายงานการกระทำของผู้ใช้"
+    },
+    {
+      "file": "src/components/builder/ConditionPanel.tsx",
+      "line": 194,
+      "title": "ConditionPanel — ประกอบร่างทั้งหมด",
+      "description": "นี่คือ component หลักที่ export ออกไปใช้ในหน้า Builder มันทำแค่สามอย่าง: 1) ดึง `state.conditions`, `addCondition`, `removeCondition`, `updateCondition` จาก Zustand store 2) `handleAdd` สร้าง Condition ว่าง ๆ พร้อม `crypto.randomUUID()` แล้ว push เข้า store 3) map ทุก condition ออกมาเป็น `ConditionRow` การ save ลง database เกิดขึ้นอัตโนมัติผ่าน `useAutoSave` ใน layout ไม่ต้องทำมืออีก"
+    },
+    {
+      "file": "src/store/builder-store.ts",
+      "line": 72,
+      "title": "Store — addCondition, updateCondition, removeCondition",
+      "description": "Zustand store เก็บ conditions ทั้งหมดไว้ที่ `state.conditions` (เป็น array) ทุก action สร้าง object ใหม่แทนการแก้ของเดิม (Immutable Updates) ตัวอย่าง `addCondition` บรรทัด 73-76 ใช้ spread `[...s.state.conditions, condition]` แทนการ push เข้า array ตรง ๆ และทุก action set `isDirty: true` เพื่อบอก `useAutoSave` ว่ามีข้อมูลที่ยังไม่ได้บันทึก"
+    },
+    {
+      "file": "src/hooks/use-auto-save.ts",
+      "line": 19,
+      "title": "useAutoSave — บันทึกอัตโนมัติทุก 500ms",
+      "description": "เมื่อ `isDirty` เป็น `true` hook นี้จะรอ 500ms (debounce) แล้วส่งข้อมูลทั้งหมดขึ้น server ผ่าน tRPC ทำไม 500ms? เพื่อรวม action ถี่ ๆ (เช่นพิมพ์ทีละตัวอักษร) ให้เป็น request เดียว ไม่ต้องยิง API ทุก keystroke สังเกต `upsert.isPending` อยู่ใน deps ของ useEffect เพื่อให้ effect รันซ้ำอีกครั้งหลัง request เสร็จ และจับ dirty state ที่เกิดขึ้นระหว่างรอ"
+    },
+    {
+      "title": "สรุปและ Phase 7 ถัดไป",
+      "description": "Phase 6 สร้างระบบเงื่อนไขครบสมบูรณ์: drag field มาวางในช่องซ้าย เลือก operator จาก dropdown และ drag field หรือพิมพ์ค่ามาวางในช่องขวา ทุกการเปลี่ยนแปลงบันทึกอัตโนมัติ\n\nPhase 7 ถัดไปคือ **Formula Engine** — ส่วน Result Formula ที่ผู้ใช้จะสร้าง expression ทางคณิตศาสตร์แบบ AST tree (เช่น field A + field B * 100) และเห็นผลลัพธ์ใน Preview Box ซึ่งใช้แนวคิด Drag & Drop เดียวกันกับที่เรียนไปแล้ว"
+    }
+  ]
+}

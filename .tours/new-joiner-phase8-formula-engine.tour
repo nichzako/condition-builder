@@ -1,0 +1,98 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Phase 8 — Formula Engine + RUN (มือใหม่)",
+  "description": "ทัวร์นี้พา Dev มือใหม่เดินทางผ่าน Phase 8 ทั้งหมด ตั้งแต่ engine คำนวณ ไปจนถึง UI แสดงผล อ่านตามลำดับจะเข้าใจว่า 'กด RUN แล้วเกิดอะไรขึ้นบ้าง'",
+  "ref": "main",
+  "steps": [
+    {
+      "directory": "src/lib",
+      "title": "Step 1: บ้านของ Logic หลัก Phase 8",
+      "description": "โฟลเดอร์ `src/lib` คือที่อยู่ของ 'สมอง' ทั้งหมด\n\nPhase 8 เพิ่มไฟล์ใหม่ 2 ไฟล์ที่นี่:\n- `formula-engine.ts` — คำนวณสูตร (FormulaNode → ตัวเลข)\n- `condition-evaluator.ts` — เช็คเงื่อนไข (A > B → true/false)\n\nทั้งสองเป็น **pure functions** หมายความว่า รับ input → return output เท่านั้น ไม่ไปแตะ database หรือ state ใดๆ ทดสอบง่าย เปลี่ยนง่าย"
+    },
+    {
+      "file": "src/lib/formula-engine.ts",
+      "line": 3,
+      "title": "Step 2: DataContext — 'กล่องข้อมูล' ที่ทุกคนใช้",
+      "description": "`DataContext` คือ type ที่บอกว่า 'ข้อมูล mock ของเราหน้าตาเป็นยังไง'\n\n```typescript\ntype DataContext = Record<string, Record<string, number | string>>\n```\n\nแปลเป็นภาษาชาวบ้าน:\n```\n{\n  'table-id-1': {\n    'field-id-a': 100,\n    'field-id-b': 'hello'\n  },\n  'table-id-2': {\n    'field-id-c': 42\n  }\n}\n```\n\nทุกฟังก์ชันใน Phase 8 รับ `ctx: DataContext` ตัวนี้เพื่อดึงค่า field ออกมาคำนวณ\n\n**ทำไม export?** เพราะทั้ง `condition-evaluator.ts` และ `BuilderShell.tsx` ต้องใช้ type นี้ร่วมกัน — single source of truth"
+    },
+    {
+      "file": "src/lib/formula-engine.ts",
+      "selection": {
+        "start": { "line": 5, "character": 0 },
+        "end": { "line": 10, "character": 0 }
+      },
+      "title": "Step 3: toNumber — Helper ที่ 'ตะโกน' แทนที่จะเงียบ",
+      "description": "`toNumber` เป็น helper เล็กๆ ที่สำคัญมาก\n\nJavaScript built-in: `Number('hello')` → `NaN` (เงียบๆ ไม่มี error)\n`toNumber('hello', 'hint')` → throw Error ชัดๆ ว่า `'hint is not a number: \"hello\"'`\n\n**ทำไมสำคัญ?**\nถ้าไม่ใช้ toNumber แล้ว NaN ไปคำนวณต่อ ผลลัพธ์ทั้งหมดจะเป็น NaN หมด\nแต่ไม่มีใครรู้ว่าเกิดอะไรขึ้น เพราะไม่มี error\n\nด้วย toNumber → error จะ throw ตรงจุดที่ผิดพลาด ทำให้ debug ได้ทันที\n\n**หลักการ:** Helper ที่ throw > built-in ที่เงียบ"
+    },
+    {
+      "file": "src/lib/formula-engine.ts",
+      "selection": {
+        "start": { "line": 18, "character": 0 },
+        "end": { "line": 25, "character": 0 }
+      },
+      "title": "Step 4: evaluateFormula — หัวใจ Recursive",
+      "description": "`evaluateFormula` เป็น recursive function — มันเรียกตัวเองซ้ำๆ เพื่อแก้ FormulaNode tree\n\nNode แต่ละประเภท:\n- **literal** → return ค่าตรงๆ เช่น `100` หรือ `'hello'`\n- **field** → ดึงค่าจาก DataContext ตาม tableId + fieldId\n- **percent** → คำนวณ node ข้างใน แล้วหาร 100\n- **operation** → คำนวณ left และ right แล้วบวก/ลบ/คูณ/หาร\n\nเช่น `(Table1.Price * Table2.Qty) + 50` จะถูก represent เป็น tree:\n```\noperation(+)\n├── operation(*)\n│   ├── field(Table1.Price)\n│   └── field(Table2.Qty)\n└── literal(50)\n```\nฟังก์ชันนี้จะ 'ดำดิ่ง' ลงไปในต้นไม้ recursively จนได้ตัวเลข"
+    },
+    {
+      "file": "src/lib/formula-engine.ts",
+      "selection": {
+        "start": { "line": 39, "character": 0 },
+        "end": { "line": 43, "character": 0 }
+      },
+      "title": "Step 5: Exhaustive Guard — 'ป้ายบอกทาง' สำหรับอนาคต",
+      "description": "```typescript\ndefault: {\n  const exhausted: never = node.op\n  throw new Error(`Unknown operator: ${exhausted}`)\n}\n```\n\nนี่คือ 'ดักอนาคต' ที่ฉลาดมาก\n\n**ทำไมต้องมี?**\nตอนนี้ operator มีแค่ `+`, `-`, `*`, `/`, `%` — ครบ 5 ตัว\nแต่ถ้าวันหนึ่งคนเพิ่ม `**` (ยกกำลัง) เข้า schema แต่ลืมเพิ่มใน switch\n\n- **ถ้าไม่มี default** → function return `undefined` เงียบๆ → NaN ไหลไปทุกที่\n- **ถ้ามี default** → TypeScript error ทันทีที่ build เวลา compile → ไม่มีทางหลุดไป production\n\n`const exhausted: never = node.op` บรรทัดนี้คือ 'magic' — ถ้า TypeScript เห็นว่า node.op ยังมีค่าที่ handle ไม่ครบ มันจะ error ตรงนี้เลย\n\n**บทเรียน:** ทุก switch บน union type ต้องมีบรรทัดนี้เสมอ"
+    },
+    {
+      "file": "src/lib/condition-evaluator.ts",
+      "line": 17,
+      "title": "Step 6: evaluateCondition — เช็คเงื่อนไข ได้ true/false",
+      "description": "`evaluateCondition` ทำงานง่ายกว่า formula engine — รับ Condition 1 ข้อ แล้วตอบ `true` หรือ `false`\n\nขั้นตอน:\n1. **resolve left** — ถ้าเป็น FieldRef → ดึงค่าจาก DataContext, ถ้าเป็น literal → ใช้เลยเลย\n2. **resolve right** — เหมือนกัน\n3. **switch operator** — เปรียบค่า l กับ r\n\nสังเกต:\n- `equal` / `not_equal` → ใช้ `===` / `!==` ตรงๆ ไม่ต้องแปลงเป็น number\n- `greater_than` / `less_than` → ใช้ `toNumber()` ก่อน เพราะเปรียบเชิงตัวเลขเท่านั้น\n- `contains` → แปลงทั้งคู่เป็น string แล้วเช็ค includes\n\nถ้า field ใดไม่มีใน DataContext → throw error ชัดๆ ว่า field ไหนหาไม่เจอ"
+    },
+    {
+      "file": "src/server/routers/formula.ts",
+      "line": 165,
+      "title": "Step 7: evaluate Mutation — 'ประตูรับ RUN' บน Server",
+      "description": "`formula.evaluate` คือ tRPC mutation ที่รับการกด RUN จาก client\n\n**Input ที่รับ:**\n- `state` — BuilderState ทั้งหมด (tables, conditions, results)\n- `context` — DataContext (ค่า mock ที่ผู้ใช้ตั้งไว้)\n\n**สิ่งที่ทำ:**\n1. Loop ผ่าน `state.conditions` → เรียก `evaluateCondition` ทีละข้อ\n2. Loop ผ่าน `state.results` → เรียก `evaluateFormula` ทีละ result\n3. แต่ละอันมี try/catch — ถ้า error → ส่ง error message กลับแทน crash\n\n**สำคัญ:** mutation นี้ไม่ไปแตะ database เลย — pure computation\nรับข้อมูลมา คำนวณ แล้ว return ผลลัพธ์ทันที\n\nทำไมทำบน server? เพราะใกล้ database กว่า และ audit/log ง่ายกว่า"
+    },
+    {
+      "file": "src/components/builder/BuilderShell.tsx",
+      "selection": {
+        "start": { "line": 63, "character": 0 },
+        "end": { "line": 67, "character": 0 }
+      },
+      "title": "Step 8: mockOverrides + useMemo — Pattern สำคัญมาก",
+      "description": "นี่คือ pattern ที่สำคัญที่สุดใน Phase 8\n\n```typescript\nconst [mockOverrides, setMockOverrides] = useState<DataContext>({})\nconst mockContext = useMemo(\n  () => buildDefaultContext(state.tables, mockOverrides),\n  [state.tables, mockOverrides],\n)\n```\n\n**ทำไมแยกเป็น 2 ตัว?**\n- `mockOverrides` = เก็บเฉพาะสิ่งที่ **ผู้ใช้เปลี่ยนเอง** (เช่น แก้ field A จาก 1 เป็น 99)\n- `mockContext` = computed value รวม (default ของ fields ที่ไม่ได้แก้ + overrides)\n\n**ถ้าเก็บรวมกันจะเกิดอะไร?**\nเมื่อเพิ่ม field ใหม่ ระบบหาค่า default ไม่ได้ เพราะมันเจอค่า 'เก่า' ที่บันทึกผิดๆ ไว้แล้ว\n\n**กฎ React:** State B ที่ 'คำนวณมาจาก' State A → ใช้ `useMemo` ไม่ใช่ `useState + useEffect`"
+    },
+    {
+      "file": "src/components/builder/BuilderShell.tsx",
+      "selection": {
+        "start": { "line": 101, "character": 0 },
+        "end": { "line": 106, "character": 0 }
+      },
+      "title": "Step 9: Delta Callback — ส่งแค่ที่เปลี่ยน ไม่ส่งทั้งก้อน",
+      "description": "```typescript\nonContextChange={(tableId, fieldId, value) =>\n  setMockOverrides((prev) => ({\n    ...prev,\n    [tableId]: { ...prev[tableId], [fieldId]: value },\n  }))\n}\n```\n\nCallback นี้รับ 3 parameter: `tableId`, `fieldId`, `value`\nนั่นคือ 'บอกแค่ว่า field ไหนเปลี่ยนเป็นอะไร'\n\n**ทำไมไม่ส่ง DataContext ทั้งก้อน?**\nถ้าส่ง `mockContext` ทั้งก้อนกลับมาเก็บใน `mockOverrides`\nค่า default ทั้งหมดจะถูกบันทึกเป็น override ไปด้วย\nพอเพิ่ม field ใหม่ ค่า default ใหม่จะไม่ถูกสร้าง เพราะระบบคิดว่า 'มีอยู่แล้ว'\n\nการส่งแค่ delta (ส่วนที่เปลี่ยน) แก้ปัญหานี้ได้หมด\n\n**สังเกต:** `(prev) => ({ ...prev, ... })` คือ functional update — ป้องกัน stale closure"
+    },
+    {
+      "file": "src/components/builder/PreviewBox.tsx",
+      "line": 63,
+      "title": "Step 10: MockDataEditor — UI ให้ผู้ใช้ตั้งค่า Mock",
+      "description": "`MockDataEditor` คือ sub-component ที่แสดง input fields ให้ผู้ใช้แก้ค่าทดสอบ\n\nทำงานแบบนี้:\n1. Loop ผ่านทุก table → แสดงชื่อ table\n2. Loop ผ่านทุก field ใน table → แสดง `<input>`\n3. เมื่อแก้ค่า → เรียก `handleChange` → `parseValue` แปลง string เป็น number ถ้าทำได้ → เรียก `onContextChange` (delta)\n\n**สังเกต `parseValue`:** (บรรทัด 48)\nInput HTML มักได้ string เสมอ แต่ field อาจเป็น number\n`parseValue` เช็คว่าถ้าแปลงเป็น number ได้ → return number, ถ้าไม่ได้ → return string ต้นฉบับ\n\n**Props pattern:** รับ `tables`, `mockContext`, `onContextChange` — pure presentational, ไม่มี local state"
+    },
+    {
+      "file": "src/components/builder/PreviewBox.tsx",
+      "line": 107,
+      "title": "Step 11: ConditionResults — แสดง Pass/Fail พร้อม Icon",
+      "description": "`ConditionResults` แสดงผลลัพธ์ของแต่ละ condition\n\nแต่ละ row แสดง:\n- **CheckCircle2** (สีเขียว) ถ้า `passes: true`\n- **XCircle** (สีแดง) ถ้า `passes: false`\n- ข้อความเงื่อนไข: `left OP right` เช่น `Price > 100`\n- ถ้ามี `error` (เช่น field ไม่เจอ) → แสดง error message ต่อท้าย\n\n**สังเกต `OP_LABEL`:** (บรรทัด 40)\nตัวระบุใน schema เช่น `'greater_than'` ไม่เหมาะแสดงให้ผู้ใช้เห็น\nจึงมี map แปลงเป็น `'>'` แทน\n\n**สังเกต Empty State:** ถ้าไม่มี conditions → แสดง dashed border box แทนข้อความลอย — intentional UI, ไม่ใช่ placeholder"
+    },
+    {
+      "file": "src/components/builder/PreviewBox.tsx",
+      "line": 134,
+      "title": "Step 12: FormulaResults + ผล Evaluate",
+      "description": "`FormulaResults` แสดงผลลัพธ์ของแต่ละ result formula\n\nแต่ละ row:\n- ชื่อ result (เช่น `Result1`)\n- `=` separator\n- ถ้าสำเร็จ → แสดงค่า (เช่น `1500`, `0.3333`) ใน monospace font\n- ถ้า error → แสดง error message สีแดง\n\n**สังเกต `formatValue`:** (บรรทัด 53)\nตัวเลขเต็ม → แสดงตรงๆ ไม่มี decimal\nตัวเลขทศนิยม → `toFixed(4)` แล้วตัด trailing zeros\nเช่น `1.5` → `'1.5'` (ไม่ใช่ `'1.5000'`)\n\n**data flow รวม:**\nผู้ใช้กด RUN → BuilderShell ส่ง state + mockContext ไป tRPC → server evaluate → ส่ง RunResult กลับ → setRunResult → PreviewBox แสดงผล"
+    },
+    {
+      "title": "Step 13: จบ Phase 8 — พร้อมไป Phase 9!",
+      "description": "คุณเดินทางผ่าน Phase 8 ครบแล้ว\n\n**สิ่งที่เพิ่งเห็น:**\n```\nsrc/lib/formula-engine.ts     → คำนวณ FormulaNode (pure)\nsrc/lib/condition-evaluator.ts → เช็คเงื่อนไข (pure)\nsrc/server/routers/formula.ts  → tRPC evaluate mutation\nsrc/components/builder/\n  BuilderShell.tsx             → จัดการ state + handleRun\n  PreviewBox.tsx               → UI แสดงผล\n```\n\n**Data Flow ตอนกด RUN:**\n```\n[RUN button] \n  → evaluate.mutate({ state, mockContext })\n  → tRPC server: evaluateCondition + evaluateFormula\n  → return { conditions, results }\n  → setRunResult\n  → PreviewBox fade-in แสดงผล\n```\n\n**Phase 9 ถัดไปจะทำ:**\n- Unit tests สำหรับ formula-engine + condition-evaluator (Vitest)\n- E2E tests (Playwright)\n- Undo/Redo\n- Responsive layout\n- Production build verify\n\nดูรายละเอียดได้ที่ `PLAN.md` section Phase 9"
+    }
+  ]
+}

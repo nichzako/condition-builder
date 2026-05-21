@@ -206,9 +206,9 @@ export function ConditionPanel() {
   return (
     <section aria-labelledby="condition-panel-heading" className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <span id="condition-panel-heading" className="text-sm font-medium text-zinc-700">
+        <h2 id="condition-panel-heading" className="text-sm font-medium text-zinc-700">
           Condition
-        </span>
+        </h2>
         <button
           type="button"
           onClick={handleAdd}

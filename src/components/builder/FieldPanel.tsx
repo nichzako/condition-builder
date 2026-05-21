@@ -94,15 +94,14 @@ function TableCardHeader({ table, onRemove, onStartAddField, onRename }: TableCa
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState(table.name)
 
-  // Sync local draft if store rehydrates (e.g. multi-tab load)
-  useEffect(() => {
-    if (!editingName) setNameValue(table.name)
-  }, [table.name, editingName])
+  const startEditing = () => {
+    setNameValue(table.name)
+    setEditingName(true)
+  }
 
   const submitName = () => {
     const trimmed = nameValue.trim()
     if (trimmed && trimmed !== table.name) onRename(trimmed)
-    else setNameValue(table.name)
     setEditingName(false)
   }
 
@@ -117,10 +116,7 @@ function TableCardHeader({ table, onRemove, onStartAddField, onRename }: TableCa
           onChange={(e) => setNameValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') submitName()
-            if (e.key === 'Escape') {
-              setNameValue(table.name)
-              setEditingName(false)
-            }
+            if (e.key === 'Escape') setEditingName(false)
           }}
           onBlur={submitName}
           className="flex-1 min-w-0 text-xs font-medium border-b border-zinc-400 outline-none bg-transparent"
@@ -128,7 +124,7 @@ function TableCardHeader({ table, onRemove, onStartAddField, onRename }: TableCa
       ) : (
         <button
           type="button"
-          onClick={() => setEditingName(true)}
+          onClick={startEditing}
           title="Click to rename"
           className="flex-1 min-w-0 text-xs font-medium text-zinc-800 truncate text-left hover:text-zinc-500"
         >
@@ -253,9 +249,9 @@ export function FieldPanel() {
   return (
     <section aria-labelledby="field-panel-heading" className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <span id="field-panel-heading" className="text-sm font-medium text-zinc-700">
+        <h2 id="field-panel-heading" className="text-sm font-medium text-zinc-700">
           Fields
-        </span>
+        </h2>
         <button
           type="button"
           onClick={handleAddTable}

@@ -134,6 +134,16 @@ describe('evaluateFormula — operation', () => {
     }
     expect(evaluateFormula(node, ctx)).toBe(13)
   })
+
+  it('throws when left operand is a non-numeric string field', () => {
+    const node: FormulaNode = {
+      type: 'operation',
+      op: '+',
+      left: { type: 'field', ref: { tableId: 't1', fieldId: 'f3', label: 't1.f3' } },
+      right: { type: 'literal', value: 1 },
+    }
+    expect(() => evaluateFormula(node, ctx)).toThrow('left operand is not a number')
+  })
 })
 
 // --- nested ---

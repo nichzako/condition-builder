@@ -1,0 +1,89 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Phase 4 — Field Panel & Auto-save (มือใหม่)",
+  "description": "ทัวร์นี้พาเดินดูโค้ด Phase 4 ทีละขั้น ตั้งแต่ข้อมูลเป็นยังไง → เก็บที่ไหน → บันทึกอัตโนมัติยังไง → แสดงผลบนหน้าจอยังไง",
+  "ref": "main",
+  "steps": [
+    {
+      "directory": "src/components/builder",
+      "title": "🗂️ ก่อนอื่น — Builder อยู่ที่ไหน?",
+      "description": "โฟลเดอร์นี้เก็บ UI ทุกชิ้นของ Builder ไว้ครบ\n\n- **FieldPanel** — แผงเพิ่ม/ลบ Table และ Field (Phase 4 ทำไฟล์นี้)\n- **ConditionPanel** — แผงกำหนดเงื่อนไข (Phase 6)\n- **ResultPanel** — แผงสร้าง Formula (Phase 7)\n- **BuilderShell** — กรอบหน้าจอหลักที่รวมทุก Panel เข้าด้วยกัน\n\nเริ่มดูจากที่นี่ก่อนเสมอถ้าอยากรู้ว่า UI ไหนอยู่ไฟล์ไหน"
+    },
+    {
+      "file": "src/lib/schema.ts",
+      "line": 18,
+      "title": "📐 FieldDef — Field หนึ่งตัวมีข้อมูลอะไรบ้าง?",
+      "description": "**Situation:** `FieldDefSchema` คือ \"พิมพ์เขียว\" ของ Field หนึ่งตัว\n\n**Mechanism:** Field มี 3 อย่าง — `id` (รหัสไม่ซ้ำ), `name` (ชื่อที่แสดง), `dataType` (ชนิดข้อมูล: number/string/boolean)\n\n**Implication:** ทุกที่ในโค้ดที่พูดถึง Field จะอ้าง type นี้เสมอ — client และ server ใช้ schema เดียวกัน\n\n**Gotcha:** `dataType` ตอนนี้ default เป็น `number` ทุกตัว (Phase 4 ยังไม่มี UI เลือก type)"
+    },
+    {
+      "file": "src/lib/schema.ts",
+      "line": 24,
+      "title": "📦 TableSource — Table หนึ่งก้อนมีอะไรบ้าง?",
+      "description": "**Situation:** `TableSourceSchema` คือ \"พิมพ์เขียว\" ของ Table\n\n**Mechanism:** Table มี `id`, `name` (เช่น \"Table 1\"), `type` (table หรือ custom), และ `fields` ซึ่งเป็น array ของ FieldDef ที่นิยามไว้ข้างบน\n\n**Implication:** FieldPanel ต้องสร้าง object ที่ตรงตาม schema นี้ทุกครั้งที่ user กด \"Add Field +\"\n\n**Gotcha:** `.max(BUILDER_LIMITS.FIELDS_PER_TABLE)` คือ Zod จะ reject ถ้าใส่ field เกิน 100 ตัวต่อ table"
+    },
+    {
+      "file": "src/store/builder-store.ts",
+      "line": 41,
+      "title": "🗄️ Zustand Store — \"คลังข้อมูล\" กลางของ Builder",
+      "description": "**Situation:** `useBuilderStore` คือ global state ของ Builder ทั้งหมด\n\n**Mechanism:** ใช้ Zustand ซึ่งทำงานเหมือน \"กล่องข้อมูลกลาง\" ที่ทุก component ดึงไปใช้ได้โดยไม่ต้อง pass props ลงมาหลายชั้น\n\n**Implication:** เวลา FieldPanel เพิ่ม table → store เปลี่ยน → ทุก component ที่ subscribe จะ re-render อัตโนมัติ\n\n**Gotcha:** store นี้ไม่ได้ persist บน browser (ไม่มี localStorage) — ข้อมูลจริงอยู่ใน Database ผ่าน tRPC เท่านั้น"
+    },
+    {
+      "file": "src/store/builder-store.ts",
+      "line": 56,
+      "title": "✏️ Table Actions — addTable / removeTable / updateTable",
+      "description": "**Situation:** ทั้ง 3 functions นี้คือวิธีที่ FieldPanel แก้ไขข้อมูล Table\n\n**Mechanism:** ทุก action:\n1. สร้าง object ใหม่ด้วย spread operator (ไม่แก้ไข object เดิม)\n2. ตั้ง `isDirty: true` เพื่อบอกให้ auto-save รู้ว่ามีการเปลี่ยนแปลง\n\n**Implication:** แค่เรียก `addTable(...)` ก็พอ — auto-save จะจัดการบันทึกไป DB เองอัตโนมัติ\n\n**Gotcha:** `isDirty: true` คือ \"สัญญาณ\" สำคัญที่เชื่อม store เข้ากับ auto-save hook — ถ้าลืม set จะไม่มีการ save"
+    },
+    {
+      "file": "src/hooks/use-auto-save.ts",
+      "line": 51,
+      "title": "⏱️ Auto-save Hook — บันทึกอัตโนมัติทำงานยังไง?",
+      "description": "**Situation:** `useAutoSave` คือ hook ที่คอยดู state และบันทึกลง DB อัตโนมัติ\n\n**Mechanism:** มี `useEffect` ที่ทำงานเมื่อ `isDirty` เปลี่ยนเป็น true:\n1. รอ 500ms (debounce) — ไม่ save ทุก keystroke แต่รอให้ user หยุดพิมพ์ก่อน\n2. เรียก `formula.upsert` ผ่าน tRPC ส่งไปยัง server\n3. ถ้า save สำเร็จ → แสดง \"Saved\" ในหัว\n\n**Implication:** FieldPanel ไม่ต้องรู้เรื่อง API เลย — แค่ update store แล้วทุกอย่างเป็นอัตโนมัติ\n\n**Gotcha:** บรรทัด 57 (`if (upsert.isPending) return`) ป้องกันไม่ให้ส่ง request ซ้อนกัน — ถ้ากำลัง save อยู่จะรอให้เสร็จก่อน"
+    },
+    {
+      "file": "src/components/builder/FieldPanel.tsx",
+      "line": 208,
+      "title": "🔢 nextTableName — ตั้งชื่อ Table ไม่ให้ชนกัน",
+      "description": "**Situation:** function เล็กๆ ที่หาชื่อ Table ถัดไปให้อัตโนมัติ\n\n**Mechanism:** ค้นหาตัวเลขสูงสุดจากชื่อ Table ที่มีอยู่ (เช่น \"Table 1\", \"Table 3\") แล้วบวก 1\n\n**Implication:** ถ้ามี Table 1, Table 3 แล้วเพิ่มใหม่ → ได้ \"Table 4\" (ไม่ใช่ \"Table 2\" ที่อาจซ้ำ)\n\n**Gotcha:** ถ้า user rename table เป็น \"My Table\" แทน → ตัวเลขนั้นไม่นับ → แต่ถ้าเพิ่ม table ใหม่ก็ยังได้เลขต่อเนื่องถูกต้อง"
+    },
+    {
+      "file": "src/components/builder/FieldPanel.tsx",
+      "line": 216,
+      "title": "🏠 FieldPanel — จุดประกอบทั้งหมด",
+      "description": "**Situation:** `FieldPanel` คือ component หลักที่ user มองเห็นและโต้ตอบด้วย\n\n**Mechanism:** ทำ 3 อย่าง:\n1. ดึง `state, addTable, removeTable, updateTable` มาจาก Zustand store\n2. สร้าง handler functions (`handleAddTable`, `handleAddField`, `handleRemoveField`)\n3. Render TableCard ทีละ card ตาม `state.tables`\n\n**Implication:** ฝั่ง UI ไม่รู้เรื่อง database หรือ API เลย — รู้แค่ store\n\n**Gotcha:** `handleAddField` ใช้ `state.tables.find(...)` เพื่อหา table ก่อน แล้วค่อย spread fields เพิ่ม — ถ้า find ไม่เจอจะ return ออกทันที (early return)"
+    },
+    {
+      "file": "src/components/builder/FieldPanel.tsx",
+      "line": 171,
+      "title": "🃏 TableCard — Card แต่ละใบที่แสดง Table",
+      "description": "**Situation:** `TableCard` แสดง Table 1 ใบ รวมถึง fields ทั้งหมดภายใน\n\n**Mechanism:** ประกอบด้วย 2 ส่วน:\n- `TableCardHeader` — แถวบน (ชื่อ table + ปุ่ม + และ ×)\n- field list — loop แสดง FieldChip ทุกตัว + ช่อง AddFieldRow ถ้ากำลังเพิ่ม field\n\n**Implication:** state การเพิ่ม field (`addingField`) เก็บใน local state ของ TableCard — ไม่ต้องไปเก็บใน Zustand เพราะ UI-only\n\n**Gotcha:** กฎสำคัญ — UI state (กำลัง edit / กำลัง type) เก็บใน `useState` local; ข้อมูลจริง (tables/fields) เก็บใน Zustand"
+    },
+    {
+      "file": "src/components/builder/FieldPanel.tsx",
+      "line": 93,
+      "title": "✏️ TableCardHeader — Inline Rename ทำงานยังไง?",
+      "description": "**Situation:** กดที่ชื่อ table → เปลี่ยนเป็น input ให้แก้ชื่อได้ทันที\n\n**Mechanism:**\n- `editingName` state ควบคุมว่าแสดง button (ปกติ) หรือ input (กำลัง edit)\n- กด Enter หรือ click ออก (blur) → เรียก `submitName()` → ถ้าชื่อเปลี่ยนจริง → เรียก `onRename` → update store\n- บรรทัด 98-100: `useEffect` sync ชื่อใน input ถ้า store เปลี่ยน (กรณี multi-tab)\n\n**Gotcha:** condition `!editingName` ใน useEffect สำคัญมาก — ถ้าไม่มีจะ reset ชื่อที่กำลังพิมพ์อยู่ทันที"
+    },
+    {
+      "file": "src/components/builder/FieldPanel.tsx",
+      "line": 44,
+      "title": "📝 AddFieldRow — ป้องกัน Double Submit",
+      "description": "**Situation:** กด + ใน Table card → ช่อง input ปรากฏให้พิมพ์ชื่อ field\n\n**Mechanism:** มี `submittedRef` ซึ่งเป็น ref (ไม่ใช่ state) ทำงานเป็น guard:\n- กด Enter → `submit()` → set `submittedRef.current = true` → เพิ่ม field\n- ถ้า blur fires ทีหลัง (บาง runtime) → `submit()` ถูก block ทันทีจาก `if (submittedRef.current) return`\n\n**Gotcha:** ใช้ `useRef` แทน `useState` เพราะไม่ต้องการ re-render — แค่ต้องการ flag ที่คงอยู่ระหว่าง render cycles"
+    },
+    {
+      "file": "src/components/builder/FieldPanel.tsx",
+      "line": 17,
+      "title": "🏷️ FieldChip — แท็กสำหรับ Drag & Drop Phase 5",
+      "description": "**Situation:** `FieldChip` แสดง Field หนึ่งตัวเป็นแท็กสีเทา\n\n**Mechanism:** มี 2 สิ่งสำคัญที่ออกแบบไว้ล่วงหน้า:\n1. `data-field-id={field.id}` — attribute นี้ Phase 5 จะอ่านเพื่อรู้ว่า field ไหนกำลังถูก drag\n2. `focus-visible:opacity-100` บนปุ่ม × — ทำให้ keyboard user เห็นปุ่มเมื่อ Tab มาถึง\n\n**Implication:** Phase 4 วางรากฐานไว้แล้ว Phase 5 แค่ wrap component นี้ด้วย `useDraggable` ก็พอ\n\n**Gotcha:** `opacity-0 group-hover:opacity-100` ทำให้ปุ่ม × ซ่อนอยู่ตลอด — มองเห็นเมื่อ hover card เท่านั้น (intentional UX)"
+    },
+    {
+      "file": "src/components/builder/BuilderShell.tsx",
+      "line": 53,
+      "title": "🔌 BuilderShell — FieldPanel ต่ออยู่ตรงไหน?",
+      "description": "**Situation:** `BuilderShell` คือกรอบหน้าจอหลักที่รวม panels ทุกตัว\n\n**Mechanism:** บรรทัด 54 — `<FieldPanel />` วางอยู่ใน `<main>` พร้อมกับ ConditionPanel, ActionPanel, ResultPanel\n\nทุก panel แยกกันอิสระ — ไม่มีการ pass props ระหว่าง panel เลย เพราะทุกอย่างผ่าน Zustand store\n\n**Implication:** เพิ่ม panel ใหม่แค่เพิ่มบรรทัดเดียวที่นี่\n\n**Gotcha:** `divide-y divide-zinc-200` คือ Tailwind สร้างเส้นคั่นระหว่าง panel โดยอัตโนมัติ — ไม่ต้องใส่ border แต่ละ panel เอง"
+    },
+    {
+      "title": "🎯 จบทัวร์ Phase 4 — ไปต่อ Phase 5 ได้เลย",
+      "description": "## สิ่งที่คุณรู้แล้วหลังทัวร์นี้\n\n1. **Data flow:** Schema (Zod) → Types → Store (Zustand) → Component (React) → DB (tRPC)\n2. **Auto-save:** ทุก action ใน store ตั้ง `isDirty: true` → hook debounce 500ms → upsert ไป DB\n3. **Component tree:** FieldPanel → TableCard → [TableCardHeader + FieldChip + AddFieldRow]\n4. **Local vs Global state:** UI state (`editingName`, `addingField`) อยู่ใน `useState`; ข้อมูลจริงอยู่ใน Zustand\n\n## Phase 5 จะทำอะไรต่อ?\n\nห่อ `FieldChip` ด้วย `@dnd-kit/core` ให้ drag ได้ และสร้าง DropZone ใน ConditionPanel และ ResultPanel เพื่อรับ field ที่ drop ลงมา\n\nไฟล์ที่จะสร้างใหม่:\n- `src/components/dnd/DraggableField.tsx`\n- `src/components/dnd/DropZone.tsx`"
+    }
+  ]
+}

@@ -37,6 +37,11 @@ describe('evaluateCondition — equal', () => {
     const ctx2: DataContext = { t1: { a: 5 }, t2: { b: 5 } }
     expect(evaluateCondition(cond(fieldRef('t1', 'a'), 'equal', fieldRef('t2', 'b')), ctx2)).toBe(true)
   })
+
+  it('returns false when string "90" strictly !== number 90', () => {
+    const ctx2: DataContext = { t1: { score: '90' } }
+    expect(evaluateCondition(cond(fieldRef('t1', 'score'), 'equal', 90), ctx2)).toBe(false)
+  })
 })
 
 // --- not_equal ---
@@ -93,6 +98,13 @@ describe('evaluateCondition — contains', () => {
 
   it('coerces number to string for contains check', () => {
     expect(evaluateCondition(cond(fieldRef('t1', 'score'), 'contains', '9'), ctx)).toBe(true)
+  })
+
+  it('contains with field reference on right side', () => {
+    const ctx2: DataContext = { t1: { haystack: 'pro-user' }, t2: { needle: 'pro' } }
+    expect(
+      evaluateCondition(cond(fieldRef('t1', 'haystack'), 'contains', fieldRef('t2', 'needle')), ctx2),
+    ).toBe(true)
   })
 })
 

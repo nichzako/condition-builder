@@ -1,0 +1,89 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Phase 7 — Result / Formula Panel (Developer มือใหม่)",
+  "description": "ทัวร์นี้พา Developer มือใหม่เดิน Walk-through ทุกส่วนของ Phase 7 ตั้งแต่โครงสร้างข้อมูล FormulaNode ไปจนถึง UI Component ที่ render ต้นไม้สมการแบบ Recursive ใช้เวลาอ่านประมาณ 15–20 นาที",
+  "ref": "main",
+  "steps": [
+    {
+      "directory": "src/components/builder",
+      "title": "1. บ้านของ Builder Panels ทั้งหมด",
+      "description": "โฟลเดอร์นี้คือ 'ห้องทำงาน' ของ Builder ทั้งหมด — FieldPanel, ConditionPanel, ResultPanel, และ PreviewBox\n\nPhase 7 เพิ่ม **ResultPanel.tsx** เข้ามา ซึ่งเป็นพระเอกของทัวร์นี้\n\nก่อนอ่าน ResultPanel ให้เข้าใจภาพรวมก่อน: ผู้ใช้กด 'Add Result' → ได้แถวใหม่ → ลาก Field มาวางใน Slot → กดปุ่ม +op เพื่อเพิ่ม Operation Node → ได้สมการแบบ `A + B × C` แสดงแบบ Inline ไม่ใช่แค่ text box"
+    },
+    {
+      "file": "src/lib/schema.ts",
+      "line": 58,
+      "title": "2. FormulaNode — ต้นไม้ที่เก็บสมการ",
+      "description": "**FormulaNode** คือหัวใจของ Phase 7 ทั้งหมด มันคือ TypeScript union type ที่มี 4 แบบ:\n\n- `field` — ชี้ไปที่ Field ใน Table (เช่น Table1.Price)\n- `literal` — ตัวเลขหรือ Text ที่พิมพ์ตรงๆ (เช่น `100`)\n- `operation` — การคำนวณ 2 โหนด เช่น `left + right`\n- `percent` — ห่อโหนดหนึ่งอันด้วย '%'\n\n**Gotcha:** Node แต่ละอันสามารถมีลูกที่เป็น Node อีกอัน ทำให้ได้ต้นไม้ลึกหลายชั้น เช่น `(A + B) × (C − D)` แต่ความลึกถูกกำกับโดย `UI_MAX_DEPTH`"
+    },
+    {
+      "file": "src/lib/schema.ts",
+      "line": 5,
+      "title": "3. BUILDER_LIMITS — ตัวเลข 'ห้ามงมงาย'",
+      "description": "`BUILDER_LIMITS` คือ object เก็บตัวเลขสำคัญทุกตัวในระบบ ตรงนี้มี `FORMULA_DEPTH: 20` ซึ่งหมายความว่าต้นไม้สูงสุด 20 ชั้น\n\n**ทำไมถึงต้องมีไฟล์นี้?** เพราะ Magic Number เช่น `if (depth > 5)` ในโค้ดทำให้งง ว่า 5 มาจากไหน และถ้าอยากเปลี่ยนต้องหาทุกจุด — BUILDER_LIMITS แก้ที่เดียวได้ผลทั้งระบบ\n\n**Phase 7 Bug ที่เคยเกิด (MD-01):** ตอนแรก hardcode `MAX_DEPTH = 5` ขัดกับ `FORMULA_DEPTH = 20` — แก้ด้วย `const UI_MAX_DEPTH = Math.min(8, BUILDER_LIMITS.FORMULA_DEPTH)`"
+    },
+    {
+      "file": "src/lib/schema.ts",
+      "line": 47,
+      "title": "4. FormulaOpSchema — ยาม Validate เครื่องหมาย",
+      "description": "`FormulaOpSchema` คือ Zod enum ที่บอกว่า Operator ที่รับได้มีแค่ `+`, `-`, `*`, `/`, `%`\n\n**ทำไมต้องมี Schema นี้?** เพราะ DOM `<select>` คืน string เสมอ ถ้า cast แบบ `as FormulaOp` โดยตรง TypeScript ไม่ error แต่ถ้ามีคนส่ง `'hack'` มาโค้ดก็รับไปได้เลย\n\n**วิธีใช้ที่ถูก:** ใน OperationNodeEditor มีการเรียก `FormulaOpSchema.safeParse(e.target.value)` ก่อนเสมอ — ถ้า parse ผ่านค่อยอัปเดต node ถ้าไม่ผ่านก็ทิ้ง"
+    },
+    {
+      "file": "src/components/builder/ResultPanel.tsx",
+      "line": 11,
+      "title": "5. NodePath — พิกัด GPS ของ Node ในต้นไม้",
+      "description": "`NodePath = ('left' | 'right' | 'node')[]`\n\nลองนึกถึงต้นไม้สมการ `(A + B) × C`:\n- Root คือ Operation `×`\n- ไปซ้ายได้ Operation `+`\n- ไปซ้ายอีกทีได้ `A`\n\nPath ของ `A` คือ `['left', 'left']` — เหมือน GPS บอกทิศทาง\n\n**ทำไม Path เป็น Array?** เพราะต้นไม้ recursive ลึกไม่จำกัด การส่ง Path แทนที่จะ clone ต้นไม้ทั้งก้อนทำให้ immutable update ทำได้ง่ายกว่ามาก"
+    },
+    {
+      "file": "src/components/builder/ResultPanel.tsx",
+      "line": 36,
+      "title": "6. updateAtPath — อัปเดต Node โดยไม่แตะต้นฉบับ",
+      "description": "ฟังก์ชันนี้ทำงานแบบ Recursive:\n1. ถ้า path ว่าง → คืน `next` เลย (ถึงปลายทางแล้ว)\n2. ถ้า path ยังมีสมาชิก → ดึง head ออก แล้วลงลึกตาม type ของ node\n3. ถ้า path กับ type ไม่ match → console.warn ใน dev mode แล้ว return root เดิม\n\n**Immutability:** สังเกตว่าใช้ `{ ...root, [head]: updateAtPath(...) }` ตลอด ไม่มีการแก้ root เดิม — ทำให้ Zustand ตรวจจับ state change ได้และ trigger re-render ถูกต้อง\n\n**Gotcha:** ถ้า path ผิดฟังก์ชันจะ no-op (ไม่ทำอะไร) เพราะเป็นการ defensive programming ป้องกัน tree เสียหาย"
+    },
+    {
+      "file": "src/components/builder/ResultPanel.tsx",
+      "line": 52,
+      "title": "7. wrapInOperation — Helper ห่อ Node ด้วย Operation",
+      "description": "`wrapInOperation(left)` สร้าง Operation Node ใหม่โดยให้ Node เดิมเป็น left child และสร้าง empty FieldRef เป็น right child\n\n**ทำไมต้องมี Helper นี้?** เพราะทั้ง FieldNodeEditor และ LiteralNodeEditor มีปุ่ม '+op' ที่ทำงานเหมือนกันทุกประการ — แทนที่จะ copy-paste โค้ดซ้ำ 2 ที่ก็ extract ออกมาเป็น helper\n\n**ตัวอย่าง:** User มี `[Field A]` แล้วกด +op จะได้ `[Field A] + [empty slot]` — node เดิมย้ายไปเป็น left child"
+    },
+    {
+      "file": "src/components/builder/ResultPanel.tsx",
+      "line": 71,
+      "title": "8. FieldNodeEditor — Slot รับ Field จาก Drag & Drop",
+      "description": "Component นี้ render **DropZone** จาก Phase 5 — ผู้ใช้ลาก Field chip มาวางที่นี่ได้\n\nสังเกต 2 ปุ่มพิเศษ:\n- **abc** → เปลี่ยนจาก field slot เป็น literal input (type ของ node เปลี่ยนเลย)\n- **+op** → ห่อ node นี้ใน Operation (เรียก `wrapInOperation`)\n- **%** → ห่อ node นี้ใน Percent wrapper\n\n**depth check:** ปุ่ม +op และ % จะหายถ้า `depth >= UI_MAX_DEPTH` เพื่อไม่ให้ผู้ใช้สร้างต้นไม้ลึกเกินไปจนหน้าแตก"
+    },
+    {
+      "file": "src/components/builder/ResultPanel.tsx",
+      "line": 172,
+      "title": "9. OperationNodeEditor — ขั้วต่อสมการ A [op] B",
+      "description": "Component นี้ render:\n```\n[Left Node]  [op select]  [Right Node]  [× collapse]\n```\n\nสังเกต **สำคัญ** ตรง `onChange` ของ select:\n```tsx\nconst result = FormulaOpSchema.safeParse(e.target.value)\nif (result.success) onUpdate(path, { ...node, op: result.data })\n```\n\n`safeParse` คือยามกรอง — ถ้าค่าไม่อยู่ใน enum จะไม่อัปเดต state เลย\n\n**ปุ่ม ×:** ย่อ operation กลับเป็น left node เดิม เช่น `A + B` → `A` (B หายไป) — ใช้ `onUpdate(path, node.left)`\n\n**Recursive:** Left และ Right ต่างเรียก `<NodeEditor>` ซึ่งเป็น dispatcher — ทำให้ depth เพิ่มได้ถึง `UI_MAX_DEPTH`"
+    },
+    {
+      "file": "src/components/builder/ResultPanel.tsx",
+      "line": 255,
+      "title": "10. NodeEditor — Dispatcher ตรวจ type แล้วส่งต่อ",
+      "description": "`NodeEditor` เป็นโค้ดแค่ 5 บรรทัด แต่สำคัญมาก — มันทำหน้าที่ Switch เลือก component ตาม `node.type`:\n\n```tsx\nif (node.type === 'field')     → FieldNodeEditor\nif (node.type === 'literal')  → LiteralNodeEditor\nif (node.type === 'operation')→ OperationNodeEditor\nelse                          → PercentNodeEditor\n```\n\n**Pattern นี้เรียกว่า Dispatcher** — แทนที่จะมี if-else ยาวๆ ใน component เดียว เราแยกแต่ละ case ออกเป็น component อิสระ อ่านง่าย ต่างชิ้น test แยกได้\n\n**Gotcha:** OperationNodeEditor เรียก `<NodeEditor>` ซ้ำ ทำให้เกิด mutual recursion — JS handle ได้เพราะ depth จำกัดด้วย `UI_MAX_DEPTH`"
+    },
+    {
+      "file": "src/components/builder/ResultPanel.tsx",
+      "line": 271,
+      "title": "11. ResultRow — แถว Result หนึ่งแถว",
+      "description": "ResultRow เป็น Component ที่แสดง:\n```\n[ลำดับ]  [ชื่อ Result]  →  [FormulaTree]  [×]\n```\n\n**useCallback ที่ line 272-276:**\n```tsx\nconst handleNodeUpdate = useCallback(\n  (path, next) => {\n    onUpdate({ expression: updateAtPath(result.expression, path, next) })\n  },\n  [result.expression, onUpdate],\n)\n```\nเหตุผล: `handleNodeUpdate` ถูกส่งลงไปใน NodeEditor ลึกหลายชั้น ถ้าไม่ wrap useCallback ทุก re-render จะสร้าง function ใหม่ → children re-render ทั้งหมด → ช้าโดยไม่จำเป็น\n\n**Name input:** ใช้ `.trimStart().slice(0, BUILDER_LIMITS.STR_NAME)` กันช่องโหว่ชื่อที่ขึ้นต้นด้วยเว้นวรรคหรือยาวเกิน 200 ตัว"
+    },
+    {
+      "file": "src/components/builder/ResultPanel.tsx",
+      "line": 316,
+      "title": "12. ResultPanel — ประตูหลักที่ User เห็น",
+      "description": "`ResultPanel` เป็น exported component เดียวที่โลกภายนอกรู้จัก\n\nมันทำ 3 อย่าง:\n1. ดึง `state.results` จาก Zustand store\n2. ถ้า results ว่าง → แสดง empty state พร้อมลิงก์ 'add your first result'\n3. ถ้ามี results → วน map แสดง `<ResultRow>` แต่ละอัน\n\n**handleAdd:** สร้าง ResultFormula ใหม่ด้วย `crypto.randomUUID()` + expression เริ่มต้นเป็น empty FieldRef → ส่งไป `addResult()` ใน store → store mark `isDirty: true` → `use-auto-save.ts` (จาก Phase 4) จับ isDirty และ debounce save ไป server อัตโนมัติ"
+    },
+    {
+      "file": "src/store/builder-store.ts",
+      "line": 34,
+      "title": "13. Zustand Store — addResult / updateResult / removeResult",
+      "description": "Actions 3 ตัวนี้ถูกเรียกจาก ResultPanel:\n\n- `addResult(result)` → เพิ่มใน array, ตั้ง isDirty: true\n- `removeResult(resultId)` → filter ออก, ตั้ง isDirty: true  \n- `updateResult(resultId, updates)` → map หา id แล้ว merge update\n\n**isDirty mechanism:** ทุก action ที่แก้ state จะตั้ง `isDirty: true` → hook `use-auto-save.ts` (Phase 4) เฝ้าดู isDirty อยู่ ถ้าเป็น true จะ debounce 500ms แล้ว call `formula.upsert` ผ่าน tRPC → save ลง Vercel Postgres อัตโนมัติ ผู้ใช้ไม่ต้องกดปุ่ม Save\n\n**Phase 8 Preview:** ใน Phase 8 จะเพิ่ม `formula.evaluate` endpoint รับ BuilderState + data context → ประเมินผล FormulaNode tree → ส่งกลับมาแสดงใน PreviewBox"
+    },
+    {
+      "title": "14. จบ Phase 7 — พร้อมไป Phase 8",
+      "description": "ตอนนี้คุณเข้าใจครบแล้ว:\n\n✅ **FormulaNode AST** — ต้นไม้ 4 ชนิด: field, literal, operation, percent  \n✅ **NodePath + updateAtPath** — วิธี navigate และ update tree แบบ immutable  \n✅ **Dispatcher Pattern** — NodeEditor ส่งต่อไปยัง sub-component ตาม type  \n✅ **FormulaOpSchema.safeParse** — validate ก่อน update เสมอ ไม่ cast ตรงๆ  \n✅ **Auto-save pipeline** — isDirty → debounce → tRPC → Postgres  \n\n**Phase 8 จะทำอะไรต่อ?**  \nสร้าง Formula Engine (`src/lib/formula-engine.ts`) ที่รับ FormulaNode tree + data จริงๆ แล้วคำนวณออกมาเป็นตัวเลข พร้อม PreviewBox ที่แสดงผลลัพธ์ให้ผู้ใช้เห็น\n\nอ่าน Onboarding Guide ที่ `docs/ONBOARDING-PHASE7.md` เพิ่มเติมได้เลย"
+    }
+  ]
+}

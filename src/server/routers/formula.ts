@@ -9,6 +9,13 @@ import {
   ResultFormulaSchema,
   safeParseBuilderState,
 } from '@/lib/schema'
+import { evaluateFormula } from '@/lib/formula-engine'
+import { evaluateCondition } from '@/lib/condition-evaluator'
+
+const DataContextSchema = z.record(
+  z.string(),
+  z.record(z.string(), z.union([z.number(), z.string()])),
+)
 
 function requireState(raw: unknown) {
   const state = safeParseBuilderState(raw)
@@ -21,8 +28,8 @@ function requireState(raw: unknown) {
   return state
 }
 
-// Re-validate updated state through BuilderStateSchema to enforce .max() limits (WR-03)
-function requireValidState(updated: z.infer<typeof BuilderStateSchema>) {
+// Enforce recursive formula depth limits — only relevant when adding a ResultFormula
+function enforceFormulaDepthLimit(updated: z.infer<typeof BuilderStateSchema>) {
   const result = safeParseBuilderState(updated)
   if (!result) {
     throw new TRPCError({
@@ -84,7 +91,7 @@ export const formulaRouter = router({
         const formula = await tx.formula.findUnique({ where: { id: input.id } })
         if (!formula) throw new TRPCError({ code: 'NOT_FOUND', message: 'Formula not found' })
         const state = requireState(formula.state)
-        const updated = requireValidState({ ...state, tables: [...state.tables, input.table] })
+        const updated = { ...state, tables: [...state.tables, input.table] }
         return tx.formula.update({ where: { id: input.id }, data: { state: updated } })
       }),
     ),
@@ -108,10 +115,7 @@ export const formulaRouter = router({
         const formula = await tx.formula.findUnique({ where: { id: input.id } })
         if (!formula) throw new TRPCError({ code: 'NOT_FOUND', message: 'Formula not found' })
         const state = requireState(formula.state)
-        const updated = requireValidState({
-          ...state,
-          conditions: [...state.conditions, input.condition],
-        })
+        const updated = { ...state, conditions: [...state.conditions, input.condition] }
         return tx.formula.update({ where: { id: input.id }, data: { state: updated } })
       }),
     ),
@@ -138,7 +142,7 @@ export const formulaRouter = router({
         const formula = await tx.formula.findUnique({ where: { id: input.id } })
         if (!formula) throw new TRPCError({ code: 'NOT_FOUND', message: 'Formula not found' })
         const state = requireState(formula.state)
-        const updated = requireValidState({ ...state, results: [...state.results, input.result] })
+        const updated = enforceFormulaDepthLimit({ ...state, results: [...state.results, input.result] })
         return tx.formula.update({ where: { id: input.id }, data: { state: updated } })
       }),
     ),
@@ -157,4 +161,49 @@ export const formulaRouter = router({
         return tx.formula.update({ where: { id: input.id }, data: { state: updated } })
       }),
     ),
+
+  evaluate: publicProcedure
+    .input(
+      z.object({
+        state: BuilderStateSchema,
+        context: DataContextSchema,
+      }),
+    )
+    .mutation(({ input }) => {
+      const { state, context } = input
+
+      const conditions = state.conditions.map((cond) => {
+        const rightLabel =
+          typeof cond.right === 'object' ? cond.right.label : String(cond.right)
+        try {
+          const passes = evaluateCondition(cond, context)
+          return { id: cond.id, left: cond.left.label, operator: cond.operator, right: rightLabel, passes }
+        } catch (e) {
+          return {
+            id: cond.id,
+            left: cond.left.label,
+            operator: cond.operator,
+            right: rightLabel,
+            passes: false,
+            error: e instanceof Error ? e.message : 'Evaluation failed',
+          }
+        }
+      })
+
+      const results = state.results.map((result) => {
+        try {
+          const value = evaluateFormula(result.expression, context)
+          return { id: result.id, name: result.name, value }
+        } catch (e) {
+          return {
+            id: result.id,
+            name: result.name,
+            value: 0 as number | string,
+            error: e instanceof Error ? e.message : 'Evaluation failed',
+          }
+        }
+      })
+
+      return { conditions, results }
+    }),
 })

@@ -1,26 +1,37 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useBuilderStore } from '@/store/builder-store'
+import { trpc } from '@/lib/trpc/client'
 import { FieldPanel } from '@/components/builder/FieldPanel'
 import { ConditionPanel } from '@/components/builder/ConditionPanel'
 import { ActionPanel } from '@/components/builder/ActionPanel'
 import { ResultPanel } from '@/components/builder/ResultPanel'
-import { PreviewBox } from '@/components/builder/PreviewBox'
+import { PreviewBox, type RunResult } from '@/components/builder/PreviewBox'
 import { Button } from '@/components/ui/button'
 import { BuilderDndContext } from '@/components/dnd/BuilderDndContext'
+import type { TableSource } from '@/types'
+import type { DataContext } from '@/lib/formula-engine'
 
-const SAVED_DISMISS_MS = 2000
+// --- Helpers ---
+
+function buildDefaultContext(tables: TableSource[], existing: DataContext): DataContext {
+  const ctx: DataContext = {}
+  tables.forEach((table, ti) => {
+    ctx[table.id] = {}
+    table.fields.forEach((field, fi) => {
+      const prev = existing[table.id]?.[field.id]
+      ctx[table.id][field.id] =
+        prev !== undefined ? prev : field.dataType === 'string' ? `sample_${fi + 1}` : 1
+    })
+  })
+  return ctx
+}
+
+// --- SaveIndicator ---
 
 function SaveIndicator() {
-  const { saveStatus, setSaveStatus } = useBuilderStore()
-
-  // M-2: auto-dismiss "Saved" label after 2s
-  useEffect(() => {
-    if (saveStatus !== 'saved') return
-    const t = setTimeout(() => setSaveStatus('idle'), SAVED_DISMISS_MS)
-    return () => clearTimeout(t)
-  }, [saveStatus, setSaveStatus])
+  const { saveStatus } = useBuilderStore()
 
   if (saveStatus === 'idle') return null
   const label =
@@ -31,11 +42,36 @@ function SaveIndicator() {
       : saveStatus === 'saved'
         ? 'text-green-500'
         : 'text-red-500'
-  return <span className={`text-xs ${color}`}>{label}</span>
+  return (
+    <span
+      aria-live="polite"
+      aria-atomic="true"
+      className={`text-xs transition-colors duration-150 ${color}`}
+    >
+      {label}
+    </span>
+  )
 }
 
+// --- BuilderShell ---
+
 export function BuilderShell() {
-  const { name } = useBuilderStore()
+  const { name, state } = useBuilderStore()
+  // User-edited overrides — new fields get defaults, removed tables are silently ignored
+  const [mockOverrides, setMockOverrides] = useState<DataContext>({})
+  const mockContext = useMemo(
+    () => buildDefaultContext(state.tables, mockOverrides),
+    [state.tables, mockOverrides],
+  )
+  const [runResult, setRunResult] = useState<RunResult | null>(null)
+
+  const evaluate = trpc.formula.evaluate.useMutation({
+    onSuccess: (data) => setRunResult(data),
+  })
+
+  const handleRun = useCallback(() => {
+    evaluate.mutate({ state, context: mockContext })
+  }, [evaluate, state, mockContext])
 
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50">
@@ -45,8 +81,14 @@ export function BuilderShell() {
           <h1 className="text-base font-semibold text-zinc-900">{name}</h1>
           <SaveIndicator />
         </div>
-        <Button size="sm" variant="default">
-          RUN
+        <Button
+          size="sm"
+          variant="default"
+          onClick={handleRun}
+          disabled={evaluate.isPending}
+          aria-busy={evaluate.isPending}
+        >
+          {evaluate.isPending ? 'Running...' : 'RUN'}
         </Button>
       </header>
 
@@ -57,7 +99,18 @@ export function BuilderShell() {
           <ConditionPanel />
           <ActionPanel />
           <ResultPanel />
-          <PreviewBox />
+          <PreviewBox
+            tables={state.tables}
+            mockContext={mockContext}
+            onContextChange={(tableId, fieldId, value) =>
+            setMockOverrides((prev) => ({
+              ...prev,
+              [tableId]: { ...prev[tableId], [fieldId]: value },
+            }))
+          }
+            runResult={runResult}
+            isPending={evaluate.isPending}
+          />
         </main>
       </BuilderDndContext>
     </div>

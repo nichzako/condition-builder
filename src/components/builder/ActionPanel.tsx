@@ -4,13 +4,15 @@ export function ActionPanel() {
   return (
     <section aria-labelledby="action-panel-heading" className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <span id="action-panel-heading" className="text-sm font-medium text-zinc-700">
+        <h2 id="action-panel-heading" className="text-sm font-medium text-zinc-700">
           Actions
-        </span>
+        </h2>
         <button
           type="button"
           aria-label="Add action"
-          className="text-xs text-zinc-500 hover:text-zinc-800 border border-zinc-200 rounded px-2 py-1"
+          disabled
+          title="Actions — coming soon"
+          className="text-xs text-zinc-300 border border-zinc-100 rounded px-2 py-1 cursor-not-allowed"
         >
           +
         </button>
