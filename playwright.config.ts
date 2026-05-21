@@ -15,7 +15,8 @@ export default defineConfig({
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'firefox',  use: { ...devices['Desktop Firefox'] } },
+    // Firefox requires system-level VC++ libs; enable on CI where they are installed
+    ...(process.env.CI ? [{ name: 'firefox', use: { ...devices['Desktop Firefox'] } }] : []),
     { name: 'webkit',   use: { ...devices['Desktop Safari'] } },
   ],
   webServer: {
