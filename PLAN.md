@@ -14,10 +14,10 @@
 | 3 | Frontend Foundation | ✅ Done |
 | 4 | Field Panel + Auto-save | ✅ Done |
 | 5 | Drag & Drop Foundation | ✅ Done |
-| 6 | Condition Panel | ⏳ ถัดไป |
-| 7 | Result / Formula Panel | — |
-| 8 | Formula Engine + RUN | — |
-| 9 | Polish + Testing | — |
+| 6 | Condition Panel | ✅ Done |
+| 7 | Result / Formula Panel | ✅ Done |
+| 8 | Formula Engine + RUN | ✅ Done |
+| 9 | Polish + Testing | ✅ Done |
 
 ---
 
