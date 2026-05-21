@@ -6,8 +6,8 @@ import { config as loadEnv } from 'dotenv'
 loadEnv({ path: path.resolve(process.cwd(), '.env.local') })
 loadEnv({ path: path.resolve(process.cwd(), '.env') })
 
-const directUrl = process.env.DIRECT_URL
-if (!directUrl) throw new Error('DIRECT_URL is not set — run: vercel env pull .env.local')
+// generate ไม่ต้องใช้ DIRECT_URL — ปล่อยให้ migration commands error เองถ้าไม่มี
+const directUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? ''
 
 export default defineConfig({
   schema: path.join('prisma', 'schema.prisma'),
