@@ -8,6 +8,7 @@ import { ActionPanel } from '@/components/builder/ActionPanel'
 import { ResultPanel } from '@/components/builder/ResultPanel'
 import { PreviewBox } from '@/components/builder/PreviewBox'
 import { Button } from '@/components/ui/button'
+import { BuilderDndContext } from '@/components/dnd/BuilderDndContext'
 
 const SAVED_DISMISS_MS = 2000
 
@@ -49,14 +50,16 @@ export function BuilderShell() {
         </Button>
       </header>
 
-      {/* Panels */}
-      <main className="flex flex-col flex-1 divide-y divide-zinc-200">
-        <FieldPanel />
-        <ConditionPanel />
-        <ActionPanel />
-        <ResultPanel />
-        <PreviewBox />
-      </main>
+      {/* Panels — wrapped in DndContext so all panels share drag state */}
+      <BuilderDndContext>
+        <main className="flex flex-col flex-1 divide-y divide-zinc-200">
+          <FieldPanel />
+          <ConditionPanel />
+          <ActionPanel />
+          <ResultPanel />
+          <PreviewBox />
+        </main>
+      </BuilderDndContext>
     </div>
   )
 }

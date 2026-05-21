@@ -13,8 +13,8 @@
 | 2 | tRPC Routers | ✅ Done |
 | 3 | Frontend Foundation | ✅ Done |
 | 4 | Field Panel + Auto-save | ✅ Done |
-| 5 | Drag & Drop Foundation | ⏳ ถัดไป |
-| 6 | Condition Panel | — |
+| 5 | Drag & Drop Foundation | ✅ Done |
+| 6 | Condition Panel | ⏳ ถัดไป |
 | 7 | Result / Formula Panel | — |
 | 8 | Formula Engine + RUN | — |
 | 9 | Polish + Testing | — |

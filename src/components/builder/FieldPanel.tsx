@@ -2,7 +2,11 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useBuilderStore } from '@/store/builder-store'
-import type { TableSource, FieldDef } from '@/types'
+import { DraggableField } from '@/components/dnd/DraggableField'
+import type { TableSource, FieldDef, FieldRef } from '@/types'
+
+/** Mirrors Zod STR_NAME limit so the browser rejects over-length input before the server does */
+const FIELD_NAME_MAX_LENGTH = 200
 
 // --- FieldChip ---
 
@@ -13,9 +17,9 @@ interface FieldChipProps {
 
 function FieldChip({ field, onRemove }: FieldChipProps) {
   return (
-    // data-field-id retained for Phase 5 drag handle
+    // data-field-id: Phase 5 DraggableField reads this attribute
     <div
-      className="flex items-center gap-1.5 px-2 py-1 rounded bg-zinc-100 text-xs text-zinc-700 group cursor-default"
+      className="flex items-center gap-1.5 px-2 py-1 rounded bg-zinc-100 text-xs text-zinc-700 group"
       data-field-id={field.id}
     >
       <span className="truncate max-w-[110px]">{field.name}</span>
@@ -23,7 +27,7 @@ function FieldChip({ field, onRemove }: FieldChipProps) {
         type="button"
         aria-label={`Remove field ${field.name}`}
         onClick={onRemove}
-        className="shrink-0 text-zinc-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity leading-none"
+        className="shrink-0 text-zinc-400 hover:text-red-500 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity leading-none"
       >
         ×
       </button>
@@ -41,12 +45,16 @@ interface AddFieldRowProps {
 function AddFieldRow({ onAdd, onCancel }: AddFieldRowProps) {
   const [value, setValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  // Guard against double-fire: Enter (onKeyDown) may trigger onBlur on unmount in some runtimes
+  const submittedRef = useRef(false)
 
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
 
   const submit = () => {
+    if (submittedRef.current) return
+    submittedRef.current = true
     const trimmed = value.trim()
     if (trimmed) onAdd(trimmed)
     else onCancel()
@@ -57,15 +65,97 @@ function AddFieldRow({ onAdd, onCancel }: AddFieldRowProps) {
       ref={inputRef}
       type="text"
       value={value}
+      maxLength={FIELD_NAME_MAX_LENGTH}
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={(e) => {
         if (e.key === 'Enter') submit()
-        if (e.key === 'Escape') onCancel()
+        if (e.key === 'Escape') {
+          submittedRef.current = true
+          onCancel()
+        }
       }}
       onBlur={submit}
       placeholder="Field name…"
       className="w-full text-xs border border-zinc-300 rounded px-2 py-1 outline-none focus:border-zinc-500 bg-white"
     />
+  )
+}
+
+// --- TableCardHeader ---
+// Extracted from TableCard to keep each component under 50 lines
+
+interface TableCardHeaderProps {
+  table: TableSource
+  onRemove: () => void
+  onStartAddField: () => void
+  onRename: (name: string) => void
+}
+
+function TableCardHeader({ table, onRemove, onStartAddField, onRename }: TableCardHeaderProps) {
+  const [editingName, setEditingName] = useState(false)
+  const [nameValue, setNameValue] = useState(table.name)
+
+  // Sync local draft if store rehydrates (e.g. multi-tab load)
+  useEffect(() => {
+    if (!editingName) setNameValue(table.name)
+  }, [table.name, editingName])
+
+  const submitName = () => {
+    const trimmed = nameValue.trim()
+    if (trimmed && trimmed !== table.name) onRename(trimmed)
+    else setNameValue(table.name)
+    setEditingName(false)
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-1 min-h-[20px]">
+      {editingName ? (
+        <input
+          autoFocus
+          type="text"
+          value={nameValue}
+          maxLength={FIELD_NAME_MAX_LENGTH}
+          onChange={(e) => setNameValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submitName()
+            if (e.key === 'Escape') {
+              setNameValue(table.name)
+              setEditingName(false)
+            }
+          }}
+          onBlur={submitName}
+          className="flex-1 min-w-0 text-xs font-medium border-b border-zinc-400 outline-none bg-transparent"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditingName(true)}
+          title="Click to rename"
+          className="flex-1 min-w-0 text-xs font-medium text-zinc-800 truncate text-left hover:text-zinc-500"
+        >
+          {table.name}
+        </button>
+      )}
+
+      <div className="flex items-center shrink-0">
+        <button
+          type="button"
+          aria-label={`Add field to ${table.name}`}
+          onClick={onStartAddField}
+          className="w-5 h-5 flex items-center justify-center text-zinc-400 hover:text-zinc-700 text-base leading-none rounded hover:bg-zinc-100"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          aria-label={`Remove table ${table.name}`}
+          onClick={onRemove}
+          className="w-5 h-5 flex items-center justify-center text-zinc-400 hover:text-red-500 text-base leading-none rounded hover:bg-zinc-100"
+        >
+          ×
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -80,84 +170,36 @@ interface TableCardProps {
 }
 
 function TableCard({ table, onRemove, onAddField, onRemoveField, onRename }: TableCardProps) {
-  const [editingName, setEditingName] = useState(false)
-  const [nameValue, setNameValue] = useState(table.name)
   const [addingField, setAddingField] = useState(false)
-
-  // Keep nameValue in sync if parent renames via store rehydration
-  useEffect(() => {
-    setNameValue(table.name)
-  }, [table.name])
-
-  const submitName = () => {
-    const trimmed = nameValue.trim()
-    if (trimmed && trimmed !== table.name) onRename(trimmed)
-    else setNameValue(table.name)
-    setEditingName(false)
-  }
 
   return (
     <div className="flex flex-col w-44 shrink-0 rounded-lg border border-zinc-200 bg-white p-3 gap-2">
-      {/* Card header */}
-      <div className="flex items-center justify-between gap-1 min-h-[20px]">
-        {editingName ? (
-          <input
-            autoFocus
-            type="text"
-            value={nameValue}
-            onChange={(e) => setNameValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') submitName()
-              if (e.key === 'Escape') {
-                setNameValue(table.name)
-                setEditingName(false)
-              }
-            }}
-            onBlur={submitName}
-            className="flex-1 min-w-0 text-xs font-medium border-b border-zinc-400 outline-none bg-transparent"
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setEditingName(true)}
-            title="Click to rename"
-            className="flex-1 min-w-0 text-xs font-medium text-zinc-800 truncate text-left hover:text-zinc-500"
-          >
-            {table.name}
-          </button>
-        )}
+      <TableCardHeader
+        table={table}
+        onRemove={onRemove}
+        onStartAddField={() => setAddingField(true)}
+        onRename={onRename}
+      />
 
-        <div className="flex items-center shrink-0">
-          <button
-            type="button"
-            aria-label={`Add field to ${table.name}`}
-            onClick={() => setAddingField(true)}
-            className="w-5 h-5 flex items-center justify-center text-zinc-400 hover:text-zinc-700 text-base leading-none rounded hover:bg-zinc-100"
-          >
-            +
-          </button>
-          <button
-            type="button"
-            aria-label={`Remove table ${table.name}`}
-            onClick={onRemove}
-            className="w-5 h-5 flex items-center justify-center text-zinc-400 hover:text-red-500 text-base leading-none rounded hover:bg-zinc-100"
-          >
-            ×
-          </button>
-        </div>
-      </div>
-
-      {/* Field list */}
       <div className="flex flex-col gap-1">
-        {table.fields.map((field) => (
-          <FieldChip key={field.id} field={field} onRemove={() => onRemoveField(field.id)} />
-        ))}
+        {table.fields.map((field) => {
+          const fieldRef: FieldRef = {
+            tableId: table.id,
+            fieldId: field.id,
+            label: `${table.name}.${field.name}`,
+          }
+          return (
+            <DraggableField key={field.id} fieldRef={fieldRef}>
+              <FieldChip
+                field={field}
+                onRemove={() => onRemoveField(field.id)}
+              />
+            </DraggableField>
+          )
+        })}
         {addingField && (
           <AddFieldRow
-            onAdd={(name) => {
-              onAddField(name)
-              setAddingField(false)
-            }}
+            onAdd={(name) => { onAddField(name); setAddingField(false) }}
             onCancel={() => setAddingField(false)}
           />
         )}
@@ -171,13 +213,22 @@ function TableCard({ table, onRemove, onAddField, onRemoveField, onRename }: Tab
 
 // --- FieldPanel ---
 
+/** Returns "Table N" where N is one above the highest existing "Table N" name */
+function nextTableName(tables: TableSource[]): string {
+  const maxNum = tables.reduce<number>((max, t) => {
+    const match = /^Table (\d+)$/.exec(t.name)
+    return match ? Math.max(max, parseInt(match[1], 10)) : max
+  }, 0)
+  return `Table ${maxNum + 1}`
+}
+
 export function FieldPanel() {
   const { state, addTable, removeTable, updateTable } = useBuilderStore()
 
   const handleAddTable = () => {
     addTable({
       id: crypto.randomUUID(),
-      name: `Table ${state.tables.length + 1}`,
+      name: nextTableName(state.tables),
       type: 'table',
       fields: [],
     })
@@ -216,7 +267,16 @@ export function FieldPanel() {
       </div>
 
       {state.tables.length === 0 ? (
-        <p className="text-xs text-zinc-400">No fields added yet.</p>
+        <p className="text-xs text-zinc-400">
+          No fields yet —{' '}
+          <button
+            type="button"
+            onClick={handleAddTable}
+            className="underline hover:text-zinc-700"
+          >
+            add your first table
+          </button>
+        </p>
       ) : (
         <div className="flex flex-wrap gap-3">
           {state.tables.map((table) => (

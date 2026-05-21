@@ -1,0 +1,94 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Phase 1 — Data Layer (สำหรับ Developer มือใหม่)",
+  "description": "ทัวร์ชั้นข้อมูลทั้งหมดของ Condition Builder — ตั้งแต่ schema ฐานข้อมูล, Prisma Client, Zod validation จนถึง TypeScript types ก่อนเริ่ม Phase 2 (tRPC)",
+  "ref": "main",
+  "steps": [
+    {
+      "directory": "prisma",
+      "title": "จุดเริ่มต้น — โฟลเดอร์ prisma",
+      "description": "โฟลเดอร์นี้คือ 'ฝ่ายจัดการฐานข้อมูล' ทั้งหมด มีแค่ 4 ไฟล์หลัก:\n\n- `schema.prisma` — พิมพ์เขียวว่า DB มีตารางอะไร columns อะไร\n- `migrations/` — SQL ที่ Prisma สร้างให้อัตโนมัติทุกครั้งที่ schema เปลี่ยน\n- `seed.ts` — สคริปต์ใส่ข้อมูลตัวอย่างเพื่อ dev/test\n- `prisma.config.ts` (รากโปรเจกต์) — บอก Prisma CLI ว่า DB อยู่ที่ไหน\n\nทุกอย่างเริ่มจากที่นี่ ก่อนจะไปถึง API หรือ UI"
+    },
+    {
+      "file": "prisma/schema.prisma",
+      "line": 9,
+      "title": "Formula — ตารางเดียวที่เก็บทุกอย่าง",
+      "description": "แอปทั้งหมดมีแค่ **1 ตารางในฐานข้อมูล** ชื่อ `Formula`\n\nField ที่น่าสนใจที่สุดคือ `state Json` (บรรทัด 12) — มันเก็บ BuilderState ทั้งก้อนเป็น JSONB:\n```\n{\n  tables: [...],      ← data sources\n  conditions: [...],  ← เงื่อนไข\n  results: [...]      ← สูตรคำนวณ\n}\n```\n\nทำไมไม่แยกเป็นหลายตาราง? เพราะทุก state เปลี่ยนพร้อมกันตอน user ลาก drop — เซฟ JSON ก้อนเดียวง่ายกว่า JOIN 5 ตาราง\n\n`@@index([updatedAt])` และ `@@index([name])` (บรรทัด 16-17) เพิ่มมาทีหลังเพื่อให้ query เร็วขึ้นเมื่อต้องค้นหาหรือ sort"
+    },
+    {
+      "directory": "prisma/migrations",
+      "title": "Migrations — SQL ที่ Prisma สร้างให้",
+      "description": "ทุกครั้งที่รัน `npx prisma migrate dev` Prisma จะ:\n1. เปรียบเทียบ `schema.prisma` กับ DB ปัจจุบัน\n2. สร้างไฟล์ SQL ใหม่ในโฟลเดอร์นี้\n3. รัน SQL นั้นกับ DB จริง\n\nไฟล์ migration **ห้ามแก้มือ** — ถ้าอยากเปลี่ยนโครงสร้าง DB ให้แก้ `schema.prisma` แล้วรัน migrate ใหม่\n\nGit track migration files ไว้เสมอ เพราะ production server ใช้ไฟล์พวกนี้อัปเกรด DB"
+    },
+    {
+      "file": "prisma.config.ts",
+      "line": 6,
+      "title": "โหลด .env.local ก่อน — Prisma 7 Gotcha",
+      "description": "บรรทัด 6-7 นี้สำคัญมากและเป็นเรื่องที่มักงงกัน:\n\n```typescript\nloadEnv({ path: '.env.local' })\n```\n\nทำไมต้องโหลดเอง? เพราะ `.env.local` เป็น Next.js convention — Next.js โหลดให้อัตโนมัติตอน dev server รัน แต่ **Prisma CLI เป็น Node.js script ธรรมดา** ไม่รู้จัก Next.js เลยต้องโหลดเองก่อน\n\nถ้าไม่มีบรรทัดนี้ `process.env.DIRECT_URL` จะ undefined ทุกครั้งที่รัน `prisma migrate dev`"
+    },
+    {
+      "file": "prisma.config.ts",
+      "line": 12,
+      "title": "defineConfig — Prisma 7 ย้าย URL ออกจาก schema.prisma",
+      "description": "**Prisma 7 เปลี่ยน behavior สำคัญ:** URL ของ DB ไม่ได้เขียนใน `schema.prisma` แล้ว\n\nแทนที่ต้องมีไฟล์ `prisma.config.ts` บอกว่า:\n- ใช้ schema ที่ไหน\n- DB อยู่ที่ไหน (datasource.url)\n- seed command คืออะไร\n\nทำไมแยกออกมา? เพราะ `schema.prisma` ควรเป็น schema ล้วนๆ ไม่ควรผูกกับ environment-specific URL\n\nข้อสำคัญ: ที่นี่ใช้ `DIRECT_URL` (non-pooled) ไม่ใช่ `DATABASE_URL` — migration ต้องการ connection ตรงๆ ไม่ใช่ผ่าน connection pool"
+    },
+    {
+      "file": "src/server/db.ts",
+      "line": 4,
+      "title": "globalForPrisma — ป้องกัน connection flood ตอน Hot Reload",
+      "description": "บรรทัด 4-6 เป็น pattern ที่ Next.js แนะนำสำหรับ Prisma:\n\n```typescript\nconst globalForPrisma = globalThis as unknown as {\n  prisma: PrismaClient | undefined\n}\n```\n\nปัญหาของ Next.js: ตอน development Next.js reload server module ทุกครั้งที่แก้โค้ด แต่ `globalThis` ไม่ถูก reset — เลยใช้มันเก็บ instance ไว้\n\nผลลัพธ์: Prisma Client ถูกสร้างแค่ครั้งเดียวต่อ process ไม่ว่าจะ reload กี่ครั้งก็ตาม"
+    },
+    {
+      "file": "src/server/db.ts",
+      "line": 8,
+      "title": "createPrismaClient — ต้องใช้ Adapter (Prisma 7)",
+      "description": "ฟังก์ชันนี้สร้าง Prisma Client สำหรับ **runtime** (API calls)\n\n```typescript\nconst adapter = new PrismaNeon({ connectionString })\nreturn new PrismaClient({ adapter, log: [...] })\n```\n\nทำไมต้องมี adapter? Prisma 7 ไม่มี built-in driver แล้ว — ต้องเลือก adapter ตาม environment:\n- **PrismaNeon** (ที่นี่) = Neon serverless HTTP — เหมาะกับ Vercel Functions\n- **PrismaPg** (ใน seed.ts) = standard TCP — เหมาะกับ CLI scripts\n\nสังเกตว่า `log` ปรับตาม NODE_ENV — development จะเห็น SQL query ทั้งหมดใน console"
+    },
+    {
+      "file": "src/server/db.ts",
+      "line": 18,
+      "title": "export const db — ใช้ตัวนี้ทุกที่ที่ต้องการ DB",
+      "description": "บรรทัดนี้คือ singleton pattern ที่เห็นบ่อยใน Next.js:\n\n```typescript\nexport const db = globalForPrisma.prisma ?? createPrismaClient()\n```\n\n`??` หมายความว่า: ถ้า globalForPrisma.prisma มีอยู่แล้วให้ใช้ตัวเดิม ถ้ายังไม่มีให้สร้างใหม่\n\n**การใช้งาน:** ทุก tRPC router ใน Phase 2 จะ import `db` จากที่นี่:\n```typescript\nimport { db } from '@/server/db'\nconst formula = await db.formula.findUnique({ where: { id } })\n```\n\nห้าม `new PrismaClient()` เองในที่อื่นๆ — ใช้ `db` ตัวนี้เสมอ"
+    },
+    {
+      "file": "src/lib/schema.ts",
+      "line": 5,
+      "title": "FieldDefSchema — หน่วยเล็กสุดของ data model",
+      "description": "Zod schema ที่เล็กที่สุดในระบบ — บอกว่า 1 field มีรูปร่างยังไง:\n\n```typescript\nconst FieldDefSchema = z.object({\n  id: z.string(),\n  name: z.string(),\n  dataType: z.enum(['number', 'string', 'boolean']),\n})\n```\n\nทำไมต้องใช้ Zod แทน TypeScript interface เฉยๆ? เพราะ Zod ทำได้ 2 อย่างพร้อมกัน:\n1. **Validate** — ตรวจว่า `dataType` เป็นแค่ 3 ค่าที่กำหนด (enum)\n2. **Type** — TypeScript ได้ type มาฟรีผ่าน `z.infer<>`\n\nSchema ต่างๆ ใน Phase 1 ทั้งหมดก็ไล่จาก FieldDef → TableSource → Condition → BuilderState ตามลำดับ"
+    },
+    {
+      "file": "src/lib/schema.ts",
+      "line": 43,
+      "title": "FormulaNode — Type ที่อ้างอิงตัวเอง (Recursive)",
+      "description": "FormulaNode เป็น TypeScript type ที่ซับซ้อนที่สุดใน Phase 1:\n\n```typescript\ntype FormulaNode =\n  | { type: 'field'; ref: FieldRef }          ← อ้าง field จาก table\n  | { type: 'literal'; value: number|string } ← ค่าตรงๆ เช่น 100\n  | { type: 'operation'; left: FormulaNode; right: FormulaNode } ← ซ้อนได้!\n  | { type: 'percent'; node: FormulaNode }    ← คิด %\n```\n\nทำไมต้อง recursive? เพราะ formula ซ้อนกันได้ไม่จำกัด เช่น:\n```\n(Revenue - Cost) * 0.8\n```\nแปลงเป็น tree:\n```\noperation(*, \n  operation(-, Revenue, Cost),\n  literal(0.8)\n)\n```\n\n**สำคัญ:** FormulaNode ต้องประกาศเป็น `type` แบบ manual — ไม่สามารถใช้ `z.infer<>` ได้เพราะ TypeScript ไม่ resolve circular reference จาก `z.lazy()` อัตโนมัติ"
+    },
+    {
+      "file": "src/lib/schema.ts",
+      "line": 49,
+      "title": "FormulaNodeSchema — z.lazy() แก้ปัญหา Circular Reference",
+      "description": "```typescript\nexport const FormulaNodeSchema: z.ZodType<FormulaNode> = z.lazy(() =>\n  z.union([...])\n)\n```\n\n`z.lazy()` เป็น trick ของ Zod สำหรับ schema ที่อ้างอิงตัวเอง:\n- ถ้าเขียน `FormulaNodeSchema = z.union([..., FormulaNodeSchema, ...])` ตรงๆ จะ error เพราะมันยังไม่ถูกสร้างตอนถูกอ้าง\n- `z.lazy()` ห่อด้วย function — รอให้ถูกเรียกใช้จริงๆ ค่อยสร้าง schema ตอนนั้น\n\nGotcha: ต้องระบุ `: z.ZodType<FormulaNode>` ด้วย ไม่งั้น TypeScript จะ infer type ผิด"
+    },
+    {
+      "file": "src/lib/schema.ts",
+      "line": 80,
+      "title": "parseBuilderState — ใช้ตัวนี้ทุกครั้งที่โหลด data จาก DB",
+      "description": "```typescript\nexport function parseBuilderState(raw: unknown): z.infer<typeof BuilderStateSchema> {\n  return BuilderStateSchema.parse(raw)\n}\n```\n\nทำไม Prisma return `unknown` แทนที่จะเป็น type ที่ถูกต้อง? เพราะ `Formula.state` ถูก declare เป็น `Json` ใน schema.prisma — Prisma ไม่รู้ว่าข้างในมีอะไร\n\n**วิธีใช้ใน Phase 2:**\n```typescript\nconst formula = await db.formula.findUnique({ where: { id } })\nconst state = parseBuilderState(formula.state)  // ได้ BuilderState ที่ type-safe\n```\n\nถ้า data ใน DB เสียหาย (ไม่ตรง schema) ฟังก์ชันนี้จะ throw error พร้อมบอกว่า field ไหนผิด"
+    },
+    {
+      "file": "src/types/index.ts",
+      "line": 1,
+      "title": "types/index.ts — ทางลัด Import ทั่วโปรเจกต์",
+      "description": "ไฟล์นี้ไม่มี logic — แค่ re-export types ที่ infer จาก Zod schemas ใน `schema.ts`:\n\n```typescript\nexport type BuilderState = z.infer<typeof BuilderStateSchema>\nexport type Condition = z.infer<typeof ConditionSchema>\n// ...\n```\n\nทำไมต้องมีไฟล์นี้? เพราะทั่วโปรเจกต์จะ import types บ่อยมาก ถ้าต้องเขียน `z.infer<typeof BuilderStateSchema>` ทุกที่จะยาวและน่าเบื่อ\n\n**วิธีใช้:**\n```typescript\nimport type { BuilderState, Condition, FieldRef } from '@/types'\n```\n\nGotcha: `FormulaNode` ถูก export จาก `schema.ts` โดยตรง (บรรทัด 13) ไม่ใช่จาก `z.infer<>` เพราะมันเป็น manual type"
+    },
+    {
+      "file": "prisma/seed.ts",
+      "line": 19,
+      "title": "seedState — ข้อมูลตัวอย่างที่จะใส่ลง DB",
+      "description": "```typescript\nconst seedState: BuilderState = {\n  tables: [\n    { id: 'table1', name: 'Table 1', type: 'table', fields: [...] },\n    { id: 'table2', name: 'Table 2', type: 'table', fields: [...] },\n  ],\n  conditions: [],\n  results: [],\n}\n```\n\nใส่ type annotation `: BuilderState` เพื่อให้ TypeScript ช่วยตรวจว่า seed data มีรูปร่างถูกต้องก่อน runtime\n\nเหตุผลที่ seed.ts ใช้ `PrismaPg` (ไม่ใช่ `PrismaNeon`): seed เป็น CLI script รันผ่าน TCP โดยตรง ไม่ใช่ HTTP serverless — ต้องการ DIRECT_URL\n\nรัน seed: `npx prisma db seed`"
+    },
+    {
+      "title": "ถัดไป — Phase 2: tRPC Routers",
+      "description": "Phase 1 สร้าง 'ชั้นข้อมูล' เรียบร้อยแล้ว สิ่งที่มีตอนนี้:\n\n✅ ตาราง `Formula` ใน Neon PostgreSQL\n✅ Prisma Client singleton ที่ใช้งานได้ (`db`)\n✅ Zod schemas ที่ validate ข้อมูลทั้ง client และ server\n✅ TypeScript types ที่ infer จาก schema\n✅ Helper `parseBuilderState()` สำหรับ unbox JSONB จาก DB\n✅ Seed data สำหรับ dev\n\n**Phase 2 จะสร้าง:**\n- `src/server/trpc.ts` — ตั้งค่า tRPC\n- `src/server/routers/formula.ts` — CRUD endpoints\n- `src/server/root.ts` — รวม routers\n- `src/app/api/trpc/[trpc]/route.ts` — HTTP handler\n- `src/lib/trpc/` — client setup\n\nทุก endpoint ใน Phase 2 จะ import `db` จาก `@/server/db` และ `parseBuilderState` จาก `@/lib/schema` — สองไฟล์นี้คือสะพานระหว่าง Phase 1 และ Phase 2\n\nอ่าน `docs/onboarding-phase1.md` สำหรับรายละเอียดเพิ่มเติมและ cheat sheet คำสั่ง"
+    }
+  ]
+}

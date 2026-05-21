@@ -1,0 +1,106 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Phase 0 — Project Scaffold Tour",
+  "description": "Orientation tour สำหรับ Phase 0: Next.js 16 + TypeScript + Tailwind CSS v4 + shadcn/ui + tRPC + Prisma + Zustand. ครอบคลุมโครงสร้างทั้งหมดก่อนเริ่ม Phase 1 (Data Layer).",
+  "ref": "main",
+  "steps": [
+    {
+      "directory": "src",
+      "title": "1. ภาพรวม Source Root",
+      "description": "โครงสร้างทั้งหมดอยู่ใน `src/` แบ่งเป็น 5 โซนหลัก:\n\n- `app/` — Next.js App Router (pages, layouts, API routes)\n- `components/` — UI components (shadcn/ui + builder-specific)\n- `lib/` — shared utilities, Zod schemas, formula engine\n- `server/` — tRPC routers + Prisma client\n- `store/` — Zustand global state\n- `types/` — shared TypeScript types\n\nPhase 0 สร้าง skeleton ให้ครบทุกโซน โดย logic จะถูก populate ใน Phase 1–8 ตามลำดับ"
+    },
+    {
+      "file": "package.json",
+      "line": 6,
+      "title": "2. Dev Server Command — `--webpack` Flag",
+      "description": "script `dev` ใช้ `next dev --webpack` แทน Turbopack default\n\n**ทำไม?** Turbopack ยังไม่รองรับ Node 24 + Windows อย่างสมบูรณ์ในเวอร์ชันนี้ — ถ้าลบ flag นี้ออก dev server จะ crash บน Windows 11 + Node 24\n\n**Gotcha:** ต้องใส่ `--webpack` ทั้งใน `dev` และ `build` script เสมอ ห้าม remove โดยไม่ทดสอบก่อน"
+    },
+    {
+      "file": "package.json",
+      "line": 20,
+      "title": "3. Core Dependencies ที่ติดตั้งใน Phase 0",
+      "description": "Dependencies ทั้งหมดติดตั้งครบแล้วตั้งแต่ Phase 0:\n\n| กลุ่ม | Packages |\n|------|----------|\n| Framework | `next@16`, `react@19`, `react-dom@19` |\n| Drag & Drop | `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities` |\n| State | `zustand@5` |\n| Server State | `@trpc/server`, `@trpc/client`, `@trpc/react-query`, `@tanstack/react-query@5` |\n| Validation | `zod@4` |\n| ORM | `@prisma/client@7`, `@neondatabase/serverless` |\n| Serialization | `superjson` |\n| UI | `lucide-react`, `class-variance-authority`, `clsx`, `tailwind-merge` |\n\n`superjson` สำคัญมาก — tRPC ใช้ serialize `Date`, `Map`, `Set` ข้าม network boundary ได้อย่าง type-safe"
+    },
+    {
+      "file": "src/app/layout.tsx",
+      "line": 1,
+      "title": "4. Root Layout — Font + HTML Shell",
+      "description": "Root layout ครอบทุก page ใน app ทำหน้าที่:\n\n1. **Font loading** — Geist Sans + Geist Mono ผ่าน `next/font/google` (auto-optimized, zero CLS)\n2. **CSS variables injection** — inject font variable names เป็น `--font-geist-sans` เพื่อให้ Tailwind ใช้ผ่าน `globals.css`\n3. **HTML shell** — `h-full antialiased` ที่ html, `min-h-full flex flex-col` ที่ body รองรับ layout แบบ full-height panel\n\nPhase 3 จะเพิ่ม `TRPCProvider` + `QueryClientProvider` ที่นี่ เพื่อให้ทุก child component เรียก tRPC ได้"
+    },
+    {
+      "file": "src/app/layout.tsx",
+      "line": 15,
+      "title": "5. Metadata",
+      "description": "Next.js App Router ใช้ `export const metadata` แทน `<Head>` component เดิม\n\nค่านี้ inject เป็น `<title>` และ `<meta name=\"description\">` ใน HTML head อัตโนมัติ โดยไม่ต้อง render ที่ client"
+    },
+    {
+      "file": "src/app/globals.css",
+      "line": 1,
+      "title": "6. Tailwind CSS v4 + shadcn/ui Design Tokens",
+      "description": "Tailwind v4 ใช้ CSS-first config แทน `tailwind.config.js`:\n\n```css\n@import \"tailwindcss\";          /* Tailwind v4 core */\n@import \"tw-animate-css\";       /* animation utilities */\n@import \"shadcn/tailwind.css\";  /* shadcn/ui token layer */\n```\n\n**Gotcha:** ไม่มี `tailwind.config.ts` ในโปรเจกต์นี้ — config ทั้งหมดอยู่ใน CSS file นี้ผ่าน `@theme inline { ... }` block"
+    },
+    {
+      "file": "src/app/globals.css",
+      "line": 51,
+      "title": "7. CSS Custom Properties — Design Token System",
+      "description": "`:root` block กำหนด design tokens ทั้งหมดด้วย oklch color space:\n\n- `--background`, `--foreground` — base surface colors\n- `--primary`, `--secondary`, `--muted`, `--accent` — semantic color roles\n- `--radius` — border radius base (0.625rem) ที่ shadcn/ui components ใช้ร่วมกัน\n- `.dark { ... }` — dark mode overrides\n\nใช้ oklch แทน hex/hsl เพราะ oklch ให้ perceptual uniformity ดีกว่า — เพิ่ม/ลด lightness แล้วสีดูสม่ำเสมอทุก hue"
+    },
+    {
+      "file": "src/app/page.tsx",
+      "line": 1,
+      "title": "8. Landing Page — Phase 0 Placeholder",
+      "description": "Page นี้เป็น placeholder แสดงว่า scaffold สมบูรณ์ จะถูก replace ด้วย builder route ใน Phase 3\n\n**Pattern ที่น่าสังเกต:** page นี้เป็น Server Component (ไม่มี `'use client'`) — Next.js App Router renders ทุก component เป็น Server Component by default, Client Component ต้องระบุ `'use client'` ที่ top ของไฟล์"
+    },
+    {
+      "file": "src/lib/utils.ts",
+      "line": 1,
+      "title": "9. `cn()` Utility — Class Merging",
+      "description": "`cn()` คือ utility ที่ทุก component ใช้ merge Tailwind classes:\n\n```ts\ncn('px-4 py-2', isActive && 'bg-blue-500', className)\n```\n\n- `clsx` — handle conditional classes (`&&`, ternary, arrays)\n- `tailwind-merge` — resolve conflicts เช่น `px-4` + `px-2` → เหลือแค่ `px-2`\n\nทุก shadcn/ui component import `cn` จากไฟล์นี้ผ่าน path alias `@/lib/utils`"
+    },
+    {
+      "file": "tsconfig.json",
+      "line": 21,
+      "title": "10. Path Alias `@/*`",
+      "description": "`\"@/*\": [\"./src/*\"]` ทำให้ import แบบ absolute ได้:\n\n```ts\nimport { cn } from '@/lib/utils'        // แทน '../../../lib/utils'\nimport { BuilderStore } from '@/store/builder-store'\nimport type { FieldRef } from '@/types'\n```\n\n**Gotcha:** Next.js resolve alias นี้ทั้งใน server (Node) และ client (browser) อัตโนมัติ ไม่ต้อง config เพิ่มเติม"
+    },
+    {
+      "file": "prisma/schema.prisma",
+      "line": 1,
+      "title": "11. Prisma Schema — Skeleton สำหรับ Phase 1",
+      "description": "Schema ตั้งค่า provider เป็น `postgresql` และดึง `DATABASE_URL` จาก environment\n\n**Phase 1 จะเพิ่ม models:**\n- `Formula` — container หลัก เก็บ `BuilderState` ทั้งหมด (tables, conditions, results) เป็น JSONB\n\n**ทำไมใช้ JSONB แทน relational tables?** Formula tree มีโครงสร้าง recursive (`FormulaNode`) ที่เปลี่ยนบ่อย — เก็บเป็น JSONB ทำ evaluate/render ได้โดยตรงโดยไม่ต้อง JOIN หลาย table\n\nก่อนรัน `prisma migrate dev` ต้องมี `DATABASE_URL` จาก Vercel Postgres ก่อน (`vercel env pull .env.local`)"
+    },
+    {
+      "file": "src/server/db.ts",
+      "line": 1,
+      "title": "12. Prisma Client Singleton — Placeholder",
+      "description": "ไฟล์นี้จะ export Prisma client singleton ใน Phase 1\n\n**ทำไมต้องเป็น singleton?** Next.js hot-reload สร้าง module instances ใหม่ทุกครั้ง — ถ้าไม่ใช้ singleton จะเกิด `PrismaClientInitializationError: Too many clients already` ใน development\n\nPattern มาตรฐาน: เก็บ instance ใน `global.__prisma` เพื่อ survive hot-reload"
+    },
+    {
+      "file": "src/lib/schema.ts",
+      "line": 1,
+      "title": "13. Zod Schemas — Shared Client/Server (Phase 1)",
+      "description": "ไฟล์นี้จะเป็น single source of truth สำหรับ data shapes ทั้งโปรเจกต์\n\n**Phase 1 จะเพิ่ม:**\n- `TableSourceSchema`, `FieldDefSchema`, `FieldRefSchema`\n- `ConditionSchema`, `FormulaNodeSchema` (recursive)\n- `BuilderStateSchema`\n\n**Key insight:** tRPC ใช้ Zod schemas เดียวกันนี้ validate input/output ทั้ง server และ client โดยอัตโนมัติ — ไม่ต้อง duplicate types"
+    },
+    {
+      "file": "src/store/builder-store.ts",
+      "line": 1,
+      "title": "14. Zustand Store — Global State (Phase 3)",
+      "description": "Zustand store จะเก็บ `BuilderState` (tables, conditions, results) ใน client memory\n\n**Flow ที่จะเกิดขึ้นใน Phase 3–4:**\n1. Load state จาก server ผ่าน tRPC query\n2. User แก้ไข UI → mutate Zustand store\n3. Auto-save hook debounce 500ms → tRPC mutation persist ไป DB\n\n**ทำไม Zustand ไม่ใช่ Redux?** Formula tree มี nested update บ่อยมากจาก drag & drop — Zustand มี boilerplate น้อยกว่าและ performance เพียงพอสำหรับ use case นี้"
+    },
+    {
+      "file": "src/types/index.ts",
+      "line": 1,
+      "title": "15. TypeScript Types — Inferred จาก Zod (Phase 1)",
+      "description": "Types ทั้งหมดจะ infer จาก Zod schemas:\n\n```ts\nimport type { z } from 'zod'\nimport type { BuilderStateSchema } from '@/lib/schema'\n\nexport type BuilderState = z.infer<typeof BuilderStateSchema>\nexport type FieldRef = z.infer<typeof FieldRefSchema>\n```\n\n**Benefit:** schema และ type sync กันเสมอโดย automatic — ถ้าแก้ schema, type เปลี่ยนตาม compiler จะ catch ที่ไหนที่ใช้ type เดิม"
+    },
+    {
+      "directory": "src/components/ui",
+      "title": "16. shadcn/ui Components",
+      "description": "shadcn/ui components ที่ติดตั้งแล้วใน Phase 0:\n`button`, `card`, `input`, `select`, `dropdown-menu`, `tooltip`, `badge`, `separator`, `dialog`\n\n**Key pattern:** shadcn/ui ไม่ใช่ library ปกติ — มัน copy source code เข้า repo เลย (`src/components/ui/`) ทำให้แก้ไข component ได้โดยตรงโดยไม่ต้อง fork\n\nทุก component ใช้ `cn()` จาก `@/lib/utils` และ CSS variables จาก `globals.css` — theme เปลี่ยนที่ CSS variables อย่างเดียว components ทั้งหมดจะเปลี่ยนตาม"
+    },
+    {
+      "title": "Phase 0 สมบูรณ์ — พร้อมเริ่ม Phase 1",
+      "description": "Scaffold ครบทุกชั้น:\n\n| Layer | สถานะ Phase 0 | จะ populate Phase |\n|-------|--------------|-------------------|\n| App Router | ✅ layout + placeholder page | Phase 3 |\n| Styling | ✅ Tailwind v4 + design tokens | ทุก phase |\n| UI Components | ✅ shadcn/ui 9 components | Phase 4+ |\n| Prisma Schema | ⬜ provider only | Phase 1 |\n| Prisma Client | ⬜ placeholder | Phase 1 |\n| Zod Schemas | ⬜ placeholder | Phase 1 |\n| TypeScript Types | ⬜ placeholder | Phase 1 |\n| tRPC Routers | ⬜ not yet | Phase 2 |\n| Zustand Store | ⬜ placeholder | Phase 3 |\n\n**Phase 1 ถัดไป:** เพิ่ม Prisma models, Zod schemas, TypeScript types, Prisma client singleton, และ seed data — ต้องการ `DATABASE_URL` จาก Vercel Postgres ก่อน (`vercel env pull .env.local`)"
+    }
+  ]
+}
